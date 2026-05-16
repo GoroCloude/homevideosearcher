@@ -32,8 +32,11 @@ async def lifespan(application: FastAPI):
     # 3. Load ML models (Plans 03 and 04 add real implementations here)
     #    YOLO loads first; InsightFace loads 2 seconds later (memory spike stagger)
     logger.info("Loading YOLO model: %s", config.YOLO_MODEL)
-    application.state.yolo = None          # Plan 03 replaces with YOLO("yolov8n.pt")
-    logger.info("YOLO model loaded (stub)")
+    from .detect import load_yolo_model, _resolve_class_ids
+    application.state.yolo = load_yolo_model()
+    active_ids = _resolve_class_ids(config.YOLO_CLASSES)
+    logger.info("YOLO active classes: %s → IDs: %s", config.YOLO_CLASSES, active_ids)
+    logger.info("YOLO model ready")
 
     await asyncio.sleep(2)                 # 2-second gap before InsightFace load
 

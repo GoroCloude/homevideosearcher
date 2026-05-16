@@ -68,11 +68,18 @@ def run_yolo(
     yolo_model: Any,
 ) -> list[list[Detection]]:
     """
-    Stub. Plan 03 replaces this with real YOLOv8 batch inference.
-    Returns one list of Detection per frame (same order as frame_paths).
-    YOLO and InsightFace run sequentially — never in parallel (memory constraint).
+    Run YOLOv8 batch inference on a list of frame paths.
+    Each call processes up to YOLO_BATCH_SIZE frames.
+    Returns one list[Detection] per frame (same order as frame_paths).
+    CRITICAL: Never called in parallel with run_insightface — sequential only.
     """
-    return [[] for _ in frame_paths]
+    if yolo_model is None:
+        logger.warning("YOLO model not loaded — returning empty detections")
+        return [[] for _ in frame_paths]
+
+    from .detect import run_yolo_batch, _resolve_class_ids
+    allowed_ids = _resolve_class_ids(config.YOLO_CLASSES)
+    return run_yolo_batch(frame_paths, yolo_model, allowed_ids)
 
 
 async def run_insightface(
@@ -142,6 +149,13 @@ async def process_video(
             batch = frame_paths[batch_start : batch_start + config.YOLO_BATCH_SIZE]
             batch_results = run_yolo(batch, yolo_model)
             all_yolo_results.extend(batch_results)
+            logger.debug(
+                "[%s] YOLO batch %d/%d: %d detections",
+                video_id[:8],
+                batch_start // config.YOLO_BATCH_SIZE + 1,
+                (len(frame_paths) + config.YOLO_BATCH_SIZE - 1) // config.YOLO_BATCH_SIZE,
+                sum(len(r) for r in batch_results),
+            )
 
         # ── Step 5: InsightFace per-frame (only on frames with person detections)
         # InsightFace runs AFTER YOLO. Never parallel. Only on 'person' frames.
