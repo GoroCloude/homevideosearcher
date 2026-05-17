@@ -40,9 +40,10 @@ async def lifespan(application: FastAPI):
 
     await asyncio.sleep(2)                 # 2-second gap before InsightFace load
 
-    logger.info("Loading InsightFace buffalo_l")
-    application.state.face_app = None      # Plan 04 replaces with FaceAnalysis(...)
-    logger.info("InsightFace model loaded (stub)")
+    logger.info("Loading InsightFace buffalo_l (2s after YOLO to avoid RSS spike)")
+    from .faces import load_face_model
+    application.state.face_app = load_face_model()
+    logger.info("InsightFace buffalo_l ready")
 
     yield
 

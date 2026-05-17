@@ -88,11 +88,68 @@ async def run_insightface(
     pool,
 ) -> list[FaceDetection]:
     """
-    Stub. Plan 04 replaces this with real InsightFace inference + pgvector match.
-    Returns list of FaceDetection for a single frame.
-    YOLO and InsightFace run sequentially — never in parallel (memory constraint).
+    Run InsightFace buffalo_l on a single frame, then match each face against
+    person_embeddings via pgvector HNSW cosine search.
+
+    Returns one FaceDetection per detected face in the frame.
+
+    CRITICAL DESIGN POINTS:
+    - Called ONLY on frames where YOLO detected 'person' (enforced in process_video)
+    - Runs AFTER all YOLO batch inference is complete (sequential, never parallel)
+    - Uses face.normed_embedding (NOT face.embedding) — L2-normalized 512-dim vector
+    - Stores YOLO person detections and face detections in SEPARATE tables (FACE-05)
+    - Unmatched faces (similarity < LOW_THRESHOLD or no persons enrolled):
+        matched_person_id = NULL, match_tier = NULL → enters HDBSCAN pool (Phase 3)
     """
-    return []
+    if face_app is None:
+        logger.warning("InsightFace not loaded — returning empty face detections")
+        return []
+
+    from .faces import analyze_frame, match_face_embedding
+
+    # Step 1: Detect faces and compute ArcFace embeddings (full frame, not YOLO crop)
+    raw_faces = analyze_frame(frame_bgr_path, face_app)
+
+    if not raw_faces:
+        return []
+
+    # Step 2: Match each face against enrolled persons via pgvector HNSW
+    face_detections: list[FaceDetection] = []
+    for raw in raw_faces:
+        normed_emb = raw["normed_embedding"]
+
+        matched_person_id, similarity, match_tier = await match_face_embedding(
+            normed_emb, pool
+        )
+
+        face_detections.append(
+            FaceDetection(
+                bbox_x1=raw["bbox_x1"],
+                bbox_y1=raw["bbox_y1"],
+                bbox_x2=raw["bbox_x2"],
+                bbox_y2=raw["bbox_y2"],
+                det_score=raw["det_score"],
+                normed_embedding=normed_emb,
+                matched_person_id=matched_person_id,
+                match_similarity=similarity,
+                match_tier=match_tier,
+            )
+        )
+
+    # Log tier breakdown for observability
+    confident = sum(1 for f in face_detections if f.match_tier == "confident")
+    probable = sum(1 for f in face_detections if f.match_tier == "probable")
+    unknown = sum(1 for f in face_detections if f.match_tier is None)
+    logger.debug(
+        "Frame %s: %d faces — confident=%d probable=%d unknown=%d",
+        frame_bgr_path.name,
+        len(face_detections),
+        confident,
+        probable,
+        unknown,
+    )
+
+    return face_detections
 
 
 # ── Main pipeline ─────────────────────────────────────────────────────────────
@@ -195,6 +252,12 @@ async def process_video(
             if face_detections:
                 await _write_face_detections(pool, frame_id, face_detections)
                 result.faces_written += len(face_detections)
+                # NOTE (FACE-05): YOLO detections and InsightFace face detections are written
+                # to separate tables (detections vs face_detections). A 'person' YOLO detection
+                # means "a person-shaped object exists" — back turned, far away, no face visible.
+                # A face_detection means "a face was detected and embedded". Both are stored
+                # independently. The face pipeline runs only when has_person=True, but may
+                # find 0 faces even when YOLO found a 'person' (face not visible to camera).
 
         # ── Step 6: Finalize ──────────────────────────────────────────────────
         await update_video_status(video_id, "done")
