@@ -25,12 +25,7 @@ COPY app/ ./app/
 RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt'); print('YOLO baked')"
 
 # InsightFace buffalo_l (~280 MB: SCRFD-10G + ArcFace R100) → ~/.insightface/models/
-RUN python -c "
-from insightface.app import FaceAnalysis
-app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
-app.prepare(ctx_id=0, det_size=(640, 640))
-print('InsightFace buffalo_l baked successfully')
-"
+RUN python -c "from insightface.app import FaceAnalysis; app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider']); app.prepare(ctx_id=0, det_size=(640, 640)); print('InsightFace buffalo_l baked successfully')"
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ONNX Runtime thread count for i5-6200 (dual-core, 4 HT threads)
