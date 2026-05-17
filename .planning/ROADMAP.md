@@ -21,14 +21,16 @@
 3. YOLO Object Detection — YOLOv8n loaded once at worker startup (`lifespan` event); configurable `YOLO_CLASSES` env var; default COCO class filter; batch inference (8–16 frames); detections written to `detections` table; YOLO and InsightFace always run sequentially (never parallel)
 4. Face Recognition — InsightFace buffalo_l (SCRFD + ArcFace) loaded once at startup with 2-second post-YOLO delay; 512-dim `normed_embedding` stored per face; pgvector HNSW cosine search against `person_embeddings`; two-tier threshold applied; unmatched faces stored with `matched_person_id = NULL`; YOLO person detections and InsightFace face detections stored independently
 
+**Status: ✅ COMPLETE**
+
 **Done when:**
-- [ ] `docker compose up` starts all four services with no errors; `GET /health` returns 200 on both ingestion-worker and api
-- [ ] PostgreSQL schema is verified: `face_detections` has `unknown_cluster_id`; HNSW index has m=32, ef_construction=128; two-tier thresholds are present in config/schema; `unknown_clusters` table exists
-- [ ] `POST /ingest` with a real MinIO video key completes end-to-end: frames appear in MinIO `frames/` bucket, YOLO detections and InsightFace embeddings are written to the database
-- [ ] Re-ingesting a `done` video returns a skip response; `?force=true` re-processes and updates rows without duplicating them
-- [ ] Killing the ingestion-worker mid-video and restarting causes the video to re-queue and finish processing (no lost data, no duplicate rows)
-- [ ] `YOLO_CLASSES` env var controls which object classes are detected (verified by changing the list and re-ingesting)
-- [ ] Ops guide documents the 4 GB swap file requirement; `.env.example` covers all required vars
+- [x] `docker compose up` starts all four services with no errors; `GET /health` returns 200 on both ingestion-worker and api
+- [x] PostgreSQL schema is verified: `face_detections` has `unknown_cluster_id`; HNSW index has m=32, ef_construction=128; two-tier thresholds are present in config/schema; `unknown_clusters` table exists
+- [x] `POST /ingest` with a real MinIO video key completes end-to-end: frames appear in MinIO `frames/` bucket, YOLO detections and InsightFace embeddings are written to the database
+- [x] Re-ingesting a `done` video returns a skip response; `?force=true` re-processes and updates rows without duplicating them
+- [x] Killing the ingestion-worker mid-video and restarting causes the video to re-queue and finish processing (no lost data, no duplicate rows)
+- [x] `YOLO_CLASSES` env var controls which object classes are detected (verified by changing the list and re-ingesting)
+- [x] Ops guide documents the 4 GB swap file requirement; `.env.example` covers all required vars
 
 ---
 

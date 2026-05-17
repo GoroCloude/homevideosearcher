@@ -2,26 +2,26 @@
 
 ## Current Status
 
-**Phase:** Not started  
+**Phase:** 1 — Foundation ✅ COMPLETE  
 **Active plan:** None  
-**Last action:** Project initialized — roadmap created
+**Last action:** Phase 1 executed — all 4 plans complete (Docker Compose, Ingestion Worker, YOLO, InsightFace)
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-16)
 
 **Core value:** Automatically surface unknown faces from home camera footage and notify via daily Telegram digest  
-**Current focus:** Phase 1 — Foundation (Docker Compose + schema + ingestion pipeline + ML detection)
+**Current focus:** Phase 2 — Enrollment, Search API & n8n Automation
 
 ## Next Step
 
-Run: /gsd-plan-phase 1
+Run: /gsd-plan-phase 2
 
 ## Phase Snapshot
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| 1 — Foundation | Docker Compose stack ingests video, runs YOLO + InsightFace, writes to DB | Not started |
+| 1 — Foundation | Docker Compose stack ingests video, runs YOLO + InsightFace, writes to DB | ✅ Complete |
 | 2 — Enrollment, Search & Automation | Enroll persons, search footage, n8n auto-trigger | Not started |
 | 3 — Intelligence & Telegram Digest | HDBSCAN clustering, stable cluster UUIDs, Telegram album digest | Not started |
 | 4 — Web UI | React UI for search, persons, clusters, settings | Not started |
