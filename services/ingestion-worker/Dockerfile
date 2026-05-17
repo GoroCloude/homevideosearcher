@@ -1,7 +1,9 @@
 FROM python:3.11-slim-bookworm
 
-# System dependencies: FFmpeg for frame extraction, libGL for OpenCV
+# System dependencies: build tools for insightface C extensions + runtime libs
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
     ffmpeg \
     libgl1 \
     libglib2.0-0 \
@@ -13,7 +15,11 @@ RUN pip install --no-cache-dir uv==0.11.14
 
 WORKDIR /app
 
-# Install Python dependencies via uv
+# Pre-install insightface build-time deps before the full requirements.txt.
+# insightface==0.7.3 compiles Cython extensions — cython + numpy must exist first.
+RUN uv pip install --system --no-cache "cython" "numpy<2.0"
+
+# Install all Python dependencies via uv
 COPY requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt
 
