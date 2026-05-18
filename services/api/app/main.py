@@ -1,7 +1,5 @@
 """
-HomeVideoSearcher API service.
-Phase 2: Enrollment endpoints + lifespan model load.
-         Search/stream endpoints added in Phase 2 Plan 02.
+HomeVideoSearcher API service — Phase 2 complete.
 """
 import asyncio
 import logging
@@ -56,7 +54,10 @@ async def health() -> dict:
 # router are protected. /health and /docs stay unprotected.
 app.include_router(persons_router, dependencies=[Depends(require_token)])
 
-# Plan 02 will append:
-# app.include_router(search_router,  dependencies=[Depends(require_token)])
-# app.include_router(videos_router,  dependencies=[Depends(require_token)])
-# app.include_router(frames_router,  dependencies=[Depends(require_token)])
+from .search import router as search_router
+from .videos import router as videos_router
+from .frames import router as frames_router
+
+app.include_router(search_router,  dependencies=[Depends(require_token)])
+app.include_router(videos_router,  dependencies=[Depends(require_token)])
+app.include_router(frames_router,  dependencies=[Depends(require_token)])
