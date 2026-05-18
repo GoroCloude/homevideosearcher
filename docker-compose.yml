@@ -59,12 +59,18 @@ services:
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       API_TOKEN: ${API_TOKEN}
       API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:8080}
+      FACE_MATCH_HIGH_THRESHOLD: ${FACE_MATCH_HIGH_THRESHOLD:-0.65}
+      FACE_MATCH_LOW_THRESHOLD: ${FACE_MATCH_LOW_THRESHOLD:-0.50}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2g
     networks:
       - home-infra
 
