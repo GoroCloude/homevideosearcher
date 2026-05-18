@@ -3,8 +3,8 @@
 ## Current Status
 
 **Phase:** 4 — Web UI 🔄 IN PROGRESS  
-**Active plan:** 04-02 (next)  
-**Last action:** Phase 4 Plan 01 executed — API fixes (frames auth, public MinIO, GET /videos, stream-url) + React SPA scaffold + API hook layer
+**Active plan:** 04-03 (next)  
+**Last action:** Phase 4 Plan 02 executed — Layout shell (desktop sidebar + mobile bottom bar), FrameThumbnail with skeleton, VideoModal (Headless UI), SearchPage with filter sidebar + results grid + pagination
 
 ## Project Reference
 
@@ -15,7 +15,7 @@ See: .planning/PROJECT.md (updated 2026-05-16)
 
 ## Next Step
 
-Run: /gsd-execute-phase 04-02
+Run: /gsd-execute-phase 04-03
 
 ## Phase Snapshot
 
@@ -33,6 +33,9 @@ Run: /gsd-execute-phase 04-02
 - GET /videos/{id}/stream-url returns JSON (not 302) for JS timestamp-seek use case
 - Tailwind v3 pinned (3.4.19) with CommonJS config — v4 breaking changes avoided
 - TanStack Query v5 object-form API throughout — no legacy positional args
+- Split pending/applied filter state prevents live-refetch on every keystroke (Plan 02)
+- FrameThumbnail uses <img> directly (no authFetch) because frames router is public (Plan 02)
+- VideoModal reuses FrameThumbnail for consistency + skeleton in modal (Plan 02)
 
 ### Architecture constraints (non-negotiable)
 - Two-tier face threshold (≥0.65 confident / 0.50–0.65 probable) must be encoded in schema/config from day 1 — cannot be retrofitted
