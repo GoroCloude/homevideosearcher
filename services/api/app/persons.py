@@ -353,3 +353,102 @@ async def rematch_person(person_id: UUID) -> RematchResponse:
         person_id, len(candidate_matches),
     )
     return RematchResponse(person_id=str(person_id), matched=len(candidate_matches))
+
+
+# ── GET /persons/{person_id}/faces ────────────────────────────────────────────
+# Append these models and endpoint after rematch_person() in persons.py
+
+class PersonFaceResult(BaseModel):
+    face_detection_id: int
+    frame_id:          int
+    video_id:          str
+    ts_ms:             int
+    match_tier:        Optional[str]
+    match_similarity:  Optional[float]
+    det_score:         Optional[float]
+    thumbnail_url:     str    # /frames/{frame_id}/image
+
+
+class PersonFacesResponse(BaseModel):
+    person_id:  str
+    results:    list[PersonFaceResult]
+    pagination: dict
+
+
+@router.get("/{person_id}/faces", response_model=PersonFacesResponse)
+async def list_person_faces(
+    person_id: UUID,
+    page: int = 1,
+    page_size: int = 20,
+) -> PersonFacesResponse:
+    """
+    Paginated list of face_detections matched to this person.
+    Returns frame context (video_id, ts_ms) and thumbnail URL for each face.
+    """
+    if page < 1:
+        raise HTTPException(status_code=422, detail="page must be >= 1")
+    if not (1 <= page_size <= 100):
+        raise HTTPException(status_code=422, detail="page_size must be 1–100")
+
+    pool = await get_pool()
+
+    # Verify person exists
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id FROM known_persons WHERE id = $1", person_id
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    offset = (page - 1) * page_size
+
+    async with pool.acquire() as conn:
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM face_detections WHERE matched_person_id = $1",
+            person_id,
+        )
+        rows = await conn.fetch(
+            """
+            SELECT
+                fd.id   AS face_detection_id,
+                fd.frame_id,
+                f.video_id::text,
+                f.ts_ms,
+                fd.match_tier,
+                fd.match_similarity,
+                fd.det_score
+            FROM face_detections fd
+            JOIN frames f ON f.id = fd.frame_id
+            WHERE fd.matched_person_id = $1
+            ORDER BY f.ts_ms DESC
+            LIMIT $2 OFFSET $3
+            """,
+            person_id,
+            page_size,
+            offset,
+        )
+
+    results = [
+        PersonFaceResult(
+            face_detection_id=r["face_detection_id"],
+            frame_id=r["frame_id"],
+            video_id=r["video_id"],
+            ts_ms=r["ts_ms"],
+            match_tier=r["match_tier"],
+            match_similarity=float(r["match_similarity"]) if r["match_similarity"] else None,
+            det_score=float(r["det_score"]) if r["det_score"] else None,
+            thumbnail_url=f"/frames/{r['frame_id']}/image",
+        )
+        for r in rows
+    ]
+
+    return PersonFacesResponse(
+        person_id=str(person_id),
+        results=results,
+        pagination={
+            "page":      page,
+            "page_size": page_size,
+            "total":     int(total),
+            "has_next":  (page * page_size) < int(total),
+        },
+    )
