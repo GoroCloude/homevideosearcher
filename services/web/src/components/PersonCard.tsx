@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { PersonResponse } from '../types/api';
 import { useDeletePerson, useRematchPerson } from '../api/persons';
 import EnrollmentDropzone from './EnrollmentDropzone';
+import { addToast } from '../hooks/useToast';
 
 interface Props {
   person: PersonResponse;
@@ -17,13 +18,17 @@ export default function PersonCard({ person }: Props) {
 
   async function handleDelete() {
     await deletePerson.mutateAsync(person.id);
+    addToast(`${person.name} deleted`, 'success');
     // Parent list re-fetches via queryClient.invalidateQueries in the hook
   }
 
   async function handleRematch() {
     const result = await rematchPerson.mutateAsync(person.id);
     setRematchResult(result.matched);
-    setTimeout(() => setRematchResult(null), 4000);
+    setTimeout(() => {
+      setRematchResult(null);
+      addToast(`Rematch complete — ${result.matched} face${result.matched !== 1 ? 's' : ''} updated`, 'success');
+    }, 4000);
   }
 
   return (

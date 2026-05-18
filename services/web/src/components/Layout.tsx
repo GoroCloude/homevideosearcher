@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import clsx from 'clsx';
+import ToastContainer from './Toast';
 
 const NAV_ITEMS = [
   { to: '/',         label: 'Search',   icon: '🔍' },
@@ -46,7 +47,7 @@ export default function Layout() {
       </main>
 
       {/* Mobile bottom tab bar — visible only on mobile */}
-      <nav className="sm:hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 flex">
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 flex z-30">
         {NAV_ITEMS.map(item => (
           <NavLink
             key={item.to}
@@ -64,6 +65,8 @@ export default function Layout() {
           </NavLink>
         ))}
       </nav>
+
+      <ToastContainer />
 
     </div>
   );

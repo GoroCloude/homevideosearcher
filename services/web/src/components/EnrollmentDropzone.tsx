@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import clsx from 'clsx';
 import { useEnrollPerson } from '../api/persons';
+import { addToast } from '../hooks/useToast';
 
 interface RejectedFile {
   filename: string;
@@ -66,6 +67,10 @@ export default function EnrollmentDropzone({ personId, onSuccess }: Props) {
         return prev.filter((_, i) => rejectedNames.has(originalFiles[i]?.name ?? ''));
       });
       onSuccess?.(result.enrolled);
+      addToast(
+        `${result.enrolled} photo${result.enrolled !== 1 ? 's' : ''} enrolled successfully`,
+        'success'
+      );
     }
   }
 
