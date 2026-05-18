@@ -1,2 +1,169 @@
-// stub — replaced in Plan 03
-export default function VideosPage() { return null; }
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { format, parseISO } from 'date-fns';
+import { useVideos, useReIngestVideo } from '../api/videos';
+import { useSettings } from '../context/SettingsContext';
+import StatusBadge from '../components/StatusBadge';
+
+function shortKey(minioKey: string): string {
+  return minioKey.split('/').pop() ?? minioKey;
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return '—';
+  try { return format(parseISO(iso), 'MMM d, yyyy HH:mm'); }
+  catch { return iso; }
+}
+
+export default function VideosPage() {
+  const { settings } = useSettings();
+  const [page, setPage] = useState(1);
+
+  const { data, isLoading, isError, error } = useVideos(page);
+  const reIngest = useReIngestVideo();
+
+  const [reingestingId, setReingestingId] = useState<string | null>(null);
+
+  // No-token banner
+  if (!settings.apiToken) {
+    return (
+      <div className="p-6">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+          API token not configured.{' '}
+          <Link to="/settings" className="font-medium underline">Go to Settings →</Link>
+        </div>
+      </div>
+    );
+  }
+
+  async function handleReIngest(id: string, minioKey: string) {
+    setReingestingId(id);
+    try {
+      await reIngest.mutateAsync(minioKey);
+    } finally {
+      setReingestingId(null);
+    }
+  }
+
+  return (
+    <div className="p-4 md:p-6">
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-lg font-semibold text-gray-900">Videos</h1>
+        {data && (
+          <span className="text-sm text-gray-500">{data.total} video{data.total !== 1 ? 's' : ''}</span>
+        )}
+      </div>
+
+      {/* Loading */}
+      {isLoading && (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-12 bg-gray-200 rounded animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {/* Error */}
+      {isError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+          Failed to load videos: {error instanceof Error ? error.message : 'Unknown error'}
+        </div>
+      )}
+
+      {/* Empty */}
+      {!isLoading && !isError && data?.results.length === 0 && (
+        <div className="flex flex-col items-center py-20 text-gray-400">
+          <span className="text-4xl mb-3">🎬</span>
+          <p className="text-sm">No videos ingested yet</p>
+        </div>
+      )}
+
+      {/* Table */}
+      {data && data.results.length > 0 && (
+        <>
+          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">File</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 hidden sm:table-cell">Frames</th>
+                  <th className="px-4 py-3 hidden sm:table-cell">Detections</th>
+                  <th className="px-4 py-3 hidden md:table-cell">Faces</th>
+                  <th className="px-4 py-3 hidden lg:table-cell">Ingested</th>
+                  <th className="px-4 py-3">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.results.map(video => (
+                  <React.Fragment key={video.id}>
+                    <tr className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-gray-700 max-w-xs truncate">
+                        {shortKey(video.minio_key)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={video.status} />
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">
+                        {video.frame_count.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">
+                        {video.detection_count.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 hidden md:table-cell">
+                        {video.face_count.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 hidden lg:table-cell whitespace-nowrap">
+                        {fmtDate(video.ingested_at)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => handleReIngest(video.id, video.minio_key)}
+                          disabled={video.status === 'processing' || reingestingId === video.id}
+                          className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
+                        >
+                          {reingestingId === video.id ? 'Starting…' : 'Re-ingest'}
+                        </button>
+                      </td>
+                    </tr>
+                    {/* Error detail row */}
+                    {video.status === 'failed' && video.error_message && (
+                      <tr className="bg-red-50">
+                        <td colSpan={7} className="px-4 py-2 text-xs text-red-600">
+                          Error: {video.error_message}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {data.total > data.page_size && (
+            <div className="flex items-center justify-center gap-3 mt-4">
+              <button
+                onClick={() => setPage(p => p - 1)}
+                disabled={page <= 1}
+                className="px-3 py-1.5 text-sm border rounded disabled:opacity-40 hover:bg-gray-50"
+              >
+                ← Prev
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {page} · {data.total} total
+              </span>
+              <button
+                onClick={() => setPage(p => p + 1)}
+                disabled={!data.has_next}
+                className="px-3 py-1.5 text-sm border rounded disabled:opacity-40 hover:bg-gray-50"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
