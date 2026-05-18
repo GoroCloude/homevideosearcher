@@ -1,10 +1,13 @@
+# Stage 1: Build React SPA with Vite
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build        # tsc -b && vite build → dist/
+
+# Stage 2: Serve with nginx
 FROM nginx:1.27-alpine
-
-# Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Minimal placeholder until Phase 4 React build
-RUN echo '<html><body><h1>HomeVideoSearcher</h1><p>UI coming in Phase 4.</p></body></html>' \
-    > /usr/share/nginx/html/index.html
-
+COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
