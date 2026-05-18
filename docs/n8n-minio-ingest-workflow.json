@@ -1,0 +1,78 @@
+{
+  "name": "MinIO Video Ingest (Event-Driven)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "minio-ingest",
+        "responseMode": "onReceived",
+        "responseData": "noData",
+        "options": {}
+      },
+      "id": "b1e2c3d4-0001-0001-0001-000000000001",
+      "name": "MinIO Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "minio-ingest-webhook-v1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the MinIO object key from the S3-compatible event payload.\n// MinIO sends two payload shapes; handle both:\n//   Shape A (top-level Key field): { \"Key\": \"videos/cam01/clip.mp4\", ... }\n//   Shape B (Records array, S3-compatible): { \"Records\": [{ \"s3\": { \"object\": { \"key\": \"...\" } } }] }\nconst body = $input.first().json.body || $input.first().json;\nconst key = body.Key || (body.Records && body.Records.length > 0 && body.Records[0].s3 && body.Records[0].s3.object && body.Records[0].s3.object.key);\n\nif (!key) {\n  // Payload did not contain a recognisable object key — skip silently\n  return [];\n}\n\n// Extension filter — same set as ingestion-worker defensive guard\nconst VIDEO_EXTS = /\\.(mp4|mov|avi|mkv)$/i;\nif (!VIDEO_EXTS.test(key)) {\n  // Not a video file — skip (no HTTP call made)\n  return [];\n}\n\nreturn [{ json: { minio_key: key } }];"
+      },
+      "id": "b1e2c3d4-0002-0002-0002-000000000002",
+      "name": "Extract & Filter Key",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ingestion-worker:8001/ingest",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ minio_key: $json.minio_key }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "b1e2c3d4-0003-0003-0003-000000000003",
+      "name": "Trigger Ingest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "MinIO Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract & Filter Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Filter Key": {
+      "main": [
+        [
+          {
+            "node": "Trigger Ingest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "02-n8n-event-v1"
+}
