@@ -2,31 +2,37 @@
 
 ## Current Status
 
-**Phase:** 1 — Foundation ✅ COMPLETE  
-**Active plan:** None  
-**Last action:** Phase 1 executed — all 4 plans complete (Docker Compose, Ingestion Worker, YOLO, InsightFace)
+**Phase:** 4 — Web UI 🔄 IN PROGRESS  
+**Active plan:** 04-02 (next)  
+**Last action:** Phase 4 Plan 01 executed — API fixes (frames auth, public MinIO, GET /videos, stream-url) + React SPA scaffold + API hook layer
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-16)
 
 **Core value:** Automatically surface unknown faces from home camera footage and notify via daily Telegram digest  
-**Current focus:** Phase 2 — Enrollment, Search API & n8n Automation
+**Current focus:** Phase 4 — Web UI
 
 ## Next Step
 
-Run: /gsd-plan-phase 2
+Run: /gsd-execute-phase 04-02
 
 ## Phase Snapshot
 
 | Phase | Goal | Status |
 |-------|------|--------|
 | 1 — Foundation | Docker Compose stack ingests video, runs YOLO + InsightFace, writes to DB | ✅ Complete |
-| 2 — Enrollment, Search & Automation | Enroll persons, search footage, n8n auto-trigger | Not started |
-| 3 — Intelligence & Telegram Digest | HDBSCAN clustering, stable cluster UUIDs, Telegram album digest | Not started |
-| 4 — Web UI | React UI for search, persons, clusters, settings | Not started |
+| 2 — Enrollment, Search & Automation | Enroll persons, search footage, n8n auto-trigger | ✅ Complete |
+| 3 — Intelligence & Telegram Digest | HDBSCAN clustering, stable cluster UUIDs, Telegram album digest | ✅ Complete |
+| 4 — Web UI | React UI for search, persons, clusters, settings | 🔄 In Progress (Plan 01/04 done) |
 
-## Notes
+## Decisions
+
+- frames_router registered without Depends(require_token) — presigned MinIO URLs are self-secured via HMAC+TTL
+- Separate _public_client singleton for MINIO_PUBLIC_ENDPOINT ensures browser-resolvable presigned URLs
+- GET /videos/{id}/stream-url returns JSON (not 302) for JS timestamp-seek use case
+- Tailwind v3 pinned (3.4.19) with CommonJS config — v4 breaking changes avoided
+- TanStack Query v5 object-form API throughout — no legacy positional args
 
 ### Architecture constraints (non-negotiable)
 - Two-tier face threshold (≥0.65 confident / 0.50–0.65 probable) must be encoded in schema/config from day 1 — cannot be retrofitted

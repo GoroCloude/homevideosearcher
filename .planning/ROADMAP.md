@@ -88,11 +88,13 @@
 **Requirements covered:**
 - WEB-01, WEB-02, WEB-03, WEB-04, WEB-05, WEB-06, WEB-07
 
-**Plans:**
-1. Search Page — Default landing page: filter sidebar (multi-select persons, object class checkboxes, date-range picker, video selector, include-unknown-faces toggle); results grid of frame thumbnails; clicking a thumbnail opens a modal with detection details and a "Play in video" button that opens the stream at the correct `ts_ms`
-2. Library Management — Videos page: table with status badge, duration, detection counts, ingestion date, "Re-ingest" button; People page: enrolled-person cards with thumbnail collage and appearance count; "Add person" flow with drag-and-drop image upload (5–10 images), rejection feedback for bad images, count-based recommendation (≥5 images)
-3. Unknown Clusters & Settings — Unknown Clusters page: grid of cluster cards with representative thumbnail, appearance count, first/last seen dates; "Enroll as person" action (opens name-entry modal, calls enrollment API); "Mark as noise/ignore" action; Settings page: API base URL and bearer token (stored in localStorage)
-4. API Wiring & Polish — TanStack Query v5 for all data fetching and mutations (no global store); Tailwind CSS v3 utility-first styling throughout; utilitarian layout (not marketing); all pages work correctly with the bearer token set in Settings
+**Plans:** 4 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — API prerequisite fixes (frames auth, public MinIO, GET /videos, stream-url) + full React scaffold (Vite + Tailwind v3 + TanStack Query v5) + all API hook files
+- [ ] 04-02-PLAN.md — Search page: Layout shell, FrameThumbnail, VideoModal, SearchPage with filter sidebar + results grid + pagination
+- [ ] 04-03-PLAN.md — Library management: VideosPage (status table + Re-ingest), PeoplePage (enrollment dropzone + PersonCard), nginx ingest-api proxy
+- [ ] 04-04-PLAN.md — Unknown Clusters page + Settings page + Toast system + mobile responsive polish
 
 **Done when:**
 - [ ] Search page loads; filtering by a known person name returns frame thumbnails containing that person; filtering by object class "car" returns frames with car detections
