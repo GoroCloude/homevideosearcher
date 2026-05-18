@@ -1,0 +1,49 @@
+"""MinIO client wrapper for the api service.
+
+Only purpose in the api service: generate presigned GET URLs for
+video streams and frame thumbnails. Upload/download are ingestion-worker concerns.
+
+CRITICAL: never embed presigned URLs in search response bodies.
+Always generate on-demand at redirect time (GET /videos/{id}/stream,
+GET /frames/{id}/image). Presigned URLs expire in 1 h — stale cached
+responses would break thumbnails if URLs were pre-baked into search results.
+"""
+import logging
+from datetime import timedelta
+from typing import Optional
+
+from minio import Minio
+
+from . import config
+
+logger = logging.getLogger(__name__)
+
+_client: Optional[Minio] = None
+
+
+def get_minio_client() -> Minio:
+    """Return the shared Minio singleton (initialized on first call)."""
+    global _client
+    if _client is None:
+        _client = Minio(
+            config.MINIO_ENDPOINT,
+            access_key=config.MINIO_ACCESS_KEY,
+            secret_key=config.MINIO_SECRET_KEY,
+            secure=config.MINIO_USE_SSL,
+        )
+    return _client
+
+
+def generate_presigned_url(bucket: str, key: str, expires_hours: int = 1) -> str:
+    """
+    Generate a presigned GET URL valid for `expires_hours` hours.
+    Called per-request at redirect time — never called during search queries.
+    """
+    client = get_minio_client()
+    url = client.presigned_get_object(
+        bucket_name=bucket,
+        object_name=key,
+        expires=timedelta(hours=expires_hours),
+    )
+    logger.debug("Generated presigned URL for %s/%s (TTL=%dh)", bucket, key, expires_hours)
+    return url
