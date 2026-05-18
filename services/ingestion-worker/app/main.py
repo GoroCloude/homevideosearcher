@@ -7,7 +7,9 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import BackgroundTasks, FastAPI, Query
+from pathlib import Path
+
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 from . import config
@@ -94,6 +96,21 @@ async def ingest(
 
     minio_key = request.minio_key.strip()
     filename = minio_key.split("/")[-1]
+
+    # ── Defensive extension filter ────────────────────────────────────────
+    # Guard against MinIO webhook firing for non-video uploads
+    # (e.g., thumbnails, motion-detection images, config files).
+    _VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv"}
+    _ext = Path(filename).suffix.lower()
+    if _ext not in _VIDEO_EXTENSIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unsupported file type '{_ext}'. "
+                f"Accepted: {', '.join(sorted(_VIDEO_EXTENSIONS))}"
+            ),
+        )
+    # ─────────────────────────────────────────────────────────────────────
 
     # Check existing status
     pool = await get_pool()
