@@ -2,9 +2,9 @@
 
 ## Current Status
 
-**Phase:** 4 — Web UI 🔄 IN PROGRESS  
-**Active plan:** 04-04 (next)  
-**Last action:** Phase 4 Plan 03 executed — StatusBadge, VideosPage table + Re-ingest action, nginx /ingest-api/ proxy, EnrollmentDropzone (HTML5 drag-drop + file preview), PersonCard (add photos/rematch/delete), PeoplePage with optimistic add-person
+**Phase:** 4 — Web UI ✅ COMPLETE  
+**Active plan:** —  
+**Last action:** Phase 4 Plan 04 executed — ClusterCard + ClustersPage (Phase-3 empty state), Toast system (module-level singleton), SettingsPage (token + Test Connection), mobile polish verified (z-30 nav, pb-16 main, sr-only labels). Phase 4 complete — all 4 plans done.
 
 ## Project Reference
 
@@ -15,7 +15,7 @@ See: .planning/PROJECT.md (updated 2026-05-16)
 
 ## Next Step
 
-Run: /gsd-execute-phase 04-04
+Phase 4 complete. All 7 WEB requirements implemented. Deployment and end-to-end testing next.
 
 ## Phase Snapshot
 
@@ -38,7 +38,10 @@ Run: /gsd-execute-phase 04-04
 - VideoModal reuses FrameThumbnail for consistency + skeleton in modal (Plan 02)
 - React.Fragment key on sibling table rows (VideosPage) — prevents React key warnings (Plan 03)
 - Native HTML5 FileReader for per-file preview thumbnails in EnrollmentDropzone (Plan 03)
-- Optimistic add-person with setQueryData + rollback snapshot pattern (PeoplePage, Plan 03)
+- Toast system uses module-level singleton (not React context) so addToast() works from anywhere including outside components (Plan 04)
+- transition-transform duration-200 used for toast animation (tailwindcss-animate plugin not installed) (Plan 04)
+- skipLibCheck:true added to tsconfig.node.json to bypass Vite 8 Node type errors (Plan 04)
+- vite-env.d.ts created to provide import.meta.env types missing from scaffold (Plan 04)
 
 ### Architecture constraints (non-negotiable)
 - Two-tier face threshold (≥0.65 confident / 0.50–0.65 probable) must be encoded in schema/config from day 1 — cannot be retrofitted

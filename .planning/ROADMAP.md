@@ -88,13 +88,13 @@
 **Requirements covered:**
 - WEB-01, WEB-02, WEB-03, WEB-04, WEB-05, WEB-06, WEB-07
 
-**Plans:** 4 plans
+**Status: ✅ COMPLETE**
 
 Plans:
 - [x] 04-01-PLAN.md — API prerequisite fixes (frames auth, public MinIO, GET /videos, stream-url) + full React scaffold (Vite + Tailwind v3 + TanStack Query v5) + all API hook files
 - [x] 04-02-PLAN.md — Search page: Layout shell, FrameThumbnail, VideoModal, SearchPage with filter sidebar + results grid + pagination
 - [x] 04-03-PLAN.md — Library management: VideosPage (status table + Re-ingest), PeoplePage (enrollment dropzone + PersonCard), nginx ingest-api proxy
-- [ ] 04-04-PLAN.md — Unknown Clusters page + Settings page + Toast system + mobile responsive polish
+- [x] 04-04-PLAN.md — Unknown Clusters page + Settings page + Toast system + mobile responsive polish
 
 **Done when:**
 - [ ] Search page loads; filtering by a known person name returns frame thumbnails containing that person; filtering by object class "car" returns frames with car detections
@@ -134,7 +134,7 @@ Plans:
 | 1 — Foundation | 4 | ✅ Complete | 4/4 |
 | 2 — Enrollment, Search & Automation | 3 | ✅ Complete | 3/3 |
 | 3 — Intelligence & Telegram Digest | 2 | ✅ Complete | 2/2 |
-| 4 — Web UI | 4 | 🔄 In Progress | 3/4 |
+| 4 — Web UI | 4 | ✅ Complete | 4/4 |
 
 ---
 *Roadmap created: 2026-05-16*
