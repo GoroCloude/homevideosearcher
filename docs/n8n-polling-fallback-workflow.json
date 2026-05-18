@@ -1,0 +1,58 @@
+{
+  "name": "MinIO Video Ingest (Polling Fallback — every 10 min)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/10 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "c2f3d4e5-0001-0001-0001-000000000001",
+      "name": "Every 10 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ingestion-worker:8001/ingest/batch",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "{ \"prefix\": \"videos/\", \"force\": false }",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c2f3d4e5-0002-0002-0002-000000000002",
+      "name": "Scan & Enqueue Videos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {
+    "Every 10 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Scan & Enqueue Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "versionId": "02-n8n-polling-v1"
+}
