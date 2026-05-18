@@ -34,12 +34,29 @@ def get_minio_client() -> Minio:
     return _client
 
 
+_public_client: Optional[Minio] = None
+
+
+def get_public_minio_client() -> Minio:
+    """Return a Minio client configured with MINIO_PUBLIC_ENDPOINT for presigned URL generation.
+    Generated URLs must be browser-resolvable. Uses a separate client from the internal one."""
+    global _public_client
+    if _public_client is None:
+        _public_client = Minio(
+            config.MINIO_PUBLIC_ENDPOINT,
+            access_key=config.MINIO_ACCESS_KEY,
+            secret_key=config.MINIO_SECRET_KEY,
+            secure=config.MINIO_PUBLIC_USE_SSL,
+        )
+    return _public_client
+
+
 def generate_presigned_url(bucket: str, key: str, expires_hours: int = 1) -> str:
     """
     Generate a presigned GET URL valid for `expires_hours` hours.
     Called per-request at redirect time — never called during search queries.
     """
-    client = get_minio_client()
+    client = get_public_minio_client()
     url = client.presigned_get_object(
         bucket_name=bucket,
         object_name=key,

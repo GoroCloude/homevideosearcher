@@ -60,4 +60,4 @@ from .frames import router as frames_router
 
 app.include_router(search_router,  dependencies=[Depends(require_token)])
 app.include_router(videos_router,  dependencies=[Depends(require_token)])
-app.include_router(frames_router,  dependencies=[Depends(require_token)])
+app.include_router(frames_router)   # public — presigned MinIO URL is self-secured (HMAC + TTL)
