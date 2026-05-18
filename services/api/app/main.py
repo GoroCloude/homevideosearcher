@@ -1,18 +1,62 @@
 """
 HomeVideoSearcher API service.
-Phase 1: /health only. Full routes added in Phase 2 (Enrollment, Search).
+Phase 2: Enrollment endpoints + lifespan model load.
+         Search/stream endpoints added in Phase 2 Plan 02.
 """
+import asyncio
 import logging
-import os
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
 
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+from fastapi import Depends, FastAPI
+
+from . import config
+from .auth import require_token
+from .db import close_pool, init_pool
+from .persons import router as persons_router
+
+LOG_LEVEL = config.LOG_LEVEL
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="HomeVideoSearcher API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """
+    Startup:
+      1. Initialize asyncpg DB pool.
+      2. Load InsightFace buffalo_l (baked into image — no download).
+    Shutdown: close DB pool.
+    No YOLO loaded here — api service uses InsightFace only (for enrollment).
+    """
+    await init_pool()
+    logger.info("Loading InsightFace buffalo_l for enrollment")
+    from .faces_api import load_face_model
+    application.state.face_app = load_face_model()
+    logger.info("InsightFace buffalo_l ready (api service)")
+    yield
+    await close_pool()
+    logger.info("API service shutdown complete")
 
 
+app = FastAPI(
+    title="HomeVideoSearcher API",
+    version="0.2.0",
+    lifespan=lifespan,
+)
+
+
+# ── Unprotected endpoints (no token required) ─────────────────────────────────
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "service": "api"}
+
+
+# ── Protected routers (bearer token required) ─────────────────────────────────
+# require_token dependency is applied at router level — ALL routes in each
+# router are protected. /health and /docs stay unprotected.
+app.include_router(persons_router, dependencies=[Depends(require_token)])
+
+# Plan 02 will append:
+# app.include_router(search_router,  dependencies=[Depends(require_token)])
+# app.include_router(videos_router,  dependencies=[Depends(require_token)])
+# app.include_router(frames_router,  dependencies=[Depends(require_token)])
