@@ -3,8 +3,8 @@
 ## Current Status
 
 **Phase:** 4 — Web UI 🔄 IN PROGRESS  
-**Active plan:** 04-03 (next)  
-**Last action:** Phase 4 Plan 02 executed — Layout shell (desktop sidebar + mobile bottom bar), FrameThumbnail with skeleton, VideoModal (Headless UI), SearchPage with filter sidebar + results grid + pagination
+**Active plan:** 04-04 (next)  
+**Last action:** Phase 4 Plan 03 executed — StatusBadge, VideosPage table + Re-ingest action, nginx /ingest-api/ proxy, EnrollmentDropzone (HTML5 drag-drop + file preview), PersonCard (add photos/rematch/delete), PeoplePage with optimistic add-person
 
 ## Project Reference
 
@@ -15,7 +15,7 @@ See: .planning/PROJECT.md (updated 2026-05-16)
 
 ## Next Step
 
-Run: /gsd-execute-phase 04-03
+Run: /gsd-execute-phase 04-04
 
 ## Phase Snapshot
 
@@ -36,6 +36,9 @@ Run: /gsd-execute-phase 04-03
 - Split pending/applied filter state prevents live-refetch on every keystroke (Plan 02)
 - FrameThumbnail uses <img> directly (no authFetch) because frames router is public (Plan 02)
 - VideoModal reuses FrameThumbnail for consistency + skeleton in modal (Plan 02)
+- React.Fragment key on sibling table rows (VideosPage) — prevents React key warnings (Plan 03)
+- Native HTML5 FileReader for per-file preview thumbnails in EnrollmentDropzone (Plan 03)
+- Optimistic add-person with setQueryData + rollback snapshot pattern (PeoplePage, Plan 03)
 
 ### Architecture constraints (non-negotiable)
 - Two-tier face threshold (≥0.65 confident / 0.50–0.65 probable) must be encoded in schema/config from day 1 — cannot be retrofitted
