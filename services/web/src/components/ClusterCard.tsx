@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import type { ClusterItem } from '../types/api';
-import { useCreatePerson, useRematchPerson } from '../api/persons';
+import { useCreatePerson } from '../api/persons';
+import { usePromoteCluster, useIgnoreCluster, useRestoreCluster } from '../api/clusters';
 import FrameThumbnail from './FrameThumbnail';
 
 interface Props {
-  cluster:   ClusterItem;
-  onEnrolled?: () => void;   // called after successful enroll + rematch
+  cluster:          ClusterItem;
+  onEnrolled?:      () => void;   // called after successful enroll + promote
+  showRestoreOnly?: boolean;      // true → only show Restore button (used in Ignored section)
+  onRestored?:      () => void;   // called after successful restore
 }
 
 function fmtDate(iso: string | null): string {
@@ -15,14 +18,16 @@ function fmtDate(iso: string | null): string {
   catch { return iso; }
 }
 
-export default function ClusterCard({ cluster, onEnrolled }: Props) {
+export default function ClusterCard({ cluster, onEnrolled, showRestoreOnly, onRestored }: Props) {
   const [enrolling,   setEnrolling]   = useState(false);
   const [personName,  setPersonName]  = useState('');
   const [enrollError, setEnrollError] = useState<string | null>(null);
   const [enrollDone,  setEnrollDone]  = useState(false);
 
-  const createPerson  = useCreatePerson();
-  const rematchPerson = useRematchPerson();
+  const createPerson   = useCreatePerson();
+  const promoteCluster = usePromoteCluster();
+  const ignoreCluster  = useIgnoreCluster();
+  const restoreCluster = useRestoreCluster();
 
   async function handleEnroll(e: React.FormEvent) {
     e.preventDefault();
@@ -34,9 +39,9 @@ export default function ClusterCard({ cluster, onEnrolled }: Props) {
       // Step 1: Create the person
       const person = await createPerson.mutateAsync(name);
 
-      // Step 2: Rematch using the new person ID
-      // This retroactively matches all stored embeddings for this cluster's faces
-      await rematchPerson.mutateAsync(person.id);
+      // Step 2: Promote cluster — links cluster embeddings to the new person
+      // without triggering a full library rematch
+      await promoteCluster.mutateAsync({ clusterId: cluster.id, personId: person.id });
 
       setEnrollDone(true);
       setEnrolling(false);
@@ -46,7 +51,24 @@ export default function ClusterCard({ cluster, onEnrolled }: Props) {
     }
   }
 
-  const isPending = createPerson.isPending || rematchPerson.isPending;
+  async function handleIgnore() {
+    try {
+      await ignoreCluster.mutateAsync(cluster.id);
+    } catch {
+      // silently swallow — cluster list will refresh regardless
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      await restoreCluster.mutateAsync(cluster.id);
+      onRestored?.();
+    } catch {
+      // silently swallow
+    }
+  }
+
+  const isPending = createPerson.isPending || promoteCluster.isPending;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
@@ -77,7 +99,17 @@ export default function ClusterCard({ cluster, onEnrolled }: Props) {
         </div>
 
         {/* Actions */}
-        {enrollDone ? (
+        {showRestoreOnly ? (
+          <div className="mt-auto">
+            <button
+              onClick={handleRestore}
+              disabled={restoreCluster.isPending}
+              className="w-full text-xs font-medium text-gray-600 hover:text-gray-800 border border-gray-300 rounded px-2 py-1.5 transition-colors disabled:opacity-50"
+            >
+              {restoreCluster.isPending ? '…' : '↩ Restore'}
+            </button>
+          </div>
+        ) : enrollDone ? (
           <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 text-center">
             ✓ Enrolled as person
           </div>
@@ -90,11 +122,12 @@ export default function ClusterCard({ cluster, onEnrolled }: Props) {
               {enrolling ? 'Cancel' : '+ Enroll as person'}
             </button>
             <button
-              disabled
-              title="Coming soon — Phase 3"
-              className="text-xs text-gray-400 border border-gray-200 rounded px-2 py-1.5 cursor-not-allowed"
+              onClick={handleIgnore}
+              disabled={ignoreCluster.isPending}
+              title="Mark as noise — hide from active clusters"
+              className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-400 rounded px-2 py-1.5 transition-colors disabled:opacity-50"
             >
-              🚫 Noise
+              {ignoreCluster.isPending ? '…' : '🚫 Noise'}
             </button>
           </div>
         )}

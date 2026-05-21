@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { useClusters } from '../api/clusters';
+import { useClusters, useIgnoredClusters } from '../api/clusters';
 import { useSettings } from '../context/SettingsContext';
 import ClusterCard from '../components/ClusterCard';
 
@@ -8,6 +9,9 @@ export default function ClustersPage() {
   const { settings }    = useSettings();
   const queryClient     = useQueryClient();
   const { data: clusters = [], isLoading, isError, error } = useClusters();
+  const { data: ignoredClusters = [] } = useIgnoredClusters();
+
+  const [ignoredOpen, setIgnoredOpen] = useState(false);
 
   // No-token banner
   if (!settings.apiToken) {
@@ -24,15 +28,19 @@ export default function ClustersPage() {
   function handleClusterEnrolled() {
     // Refresh clusters list after a cluster is enrolled as a person
     queryClient.invalidateQueries({ queryKey: ['clusters'] });
+    queryClient.invalidateQueries({ queryKey: ['clusters', 'ignored'] });
     queryClient.invalidateQueries({ queryKey: ['persons'] });
   }
+
+  // Active clusters: exclude ignored ones (API should handle this, but filter defensively)
+  const activeClusters = clusters.filter(c => !c.ignored);
 
   return (
     <div className="p-4 md:p-6">
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-lg font-semibold text-gray-900">Unknown Clusters</h1>
-        {clusters.length > 0 && (
-          <span className="text-sm text-gray-500">{clusters.length} cluster{clusters.length !== 1 ? 's' : ''}</span>
+        {activeClusters.length > 0 && (
+          <span className="text-sm text-gray-500">{activeClusters.length} cluster{activeClusters.length !== 1 ? 's' : ''}</span>
         )}
       </div>
 
@@ -53,7 +61,7 @@ export default function ClustersPage() {
       )}
 
       {/* Empty / coming soon */}
-      {!isLoading && !isError && clusters.length === 0 && (
+      {!isLoading && !isError && activeClusters.length === 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-8 flex flex-col items-center text-center gap-3 max-w-md mx-auto mt-8">
           <span className="text-4xl">🔮</span>
           <h2 className="font-semibold text-blue-900">Unknown face clustering — Phase 3</h2>
@@ -69,15 +77,44 @@ export default function ClustersPage() {
       )}
 
       {/* Cluster grid */}
-      {clusters.length > 0 && (
+      {activeClusters.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-          {clusters.map(cluster => (
+          {activeClusters.map(cluster => (
             <ClusterCard
               key={cluster.id}
               cluster={cluster}
               onEnrolled={handleClusterEnrolled}
             />
           ))}
+        </div>
+      )}
+
+      {/* Ignored section — collapsed by default */}
+      {ignoredClusters.length > 0 && (
+        <div className="mt-8">
+          <button
+            onClick={() => setIgnoredOpen(v => !v)}
+            className="flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <span className={`transition-transform ${ignoredOpen ? 'rotate-90' : ''}`}>▶</span>
+            <span>Ignored ({ignoredClusters.length})</span>
+          </button>
+
+          {ignoredOpen && (
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+              {ignoredClusters.map(cluster => (
+                <ClusterCard
+                  key={cluster.id}
+                  cluster={cluster}
+                  showRestoreOnly
+                  onRestored={() => {
+                    queryClient.invalidateQueries({ queryKey: ['clusters'] });
+                    queryClient.invalidateQueries({ queryKey: ['clusters', 'ignored'] });
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
