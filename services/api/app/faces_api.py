@@ -43,9 +43,26 @@ def analyze_image_bytes(image_data: bytes, face_app: FaceAnalysis) -> list[dict]
 
     Returns [] if image cannot be decoded or InsightFace raises.
     Caller must check len(faces) == 0 / > 1 and det_score >= 0.70 themselves.
+
+    Uses Pillow for decoding so that EXIF orientation is respected automatically.
+    Mobile phone photos (iPhone, Android) embed rotation in EXIF — OpenCV ignores
+    it, causing sideways images where InsightFace cannot detect faces.
     """
-    arr = np.frombuffer(image_data, dtype=np.uint8)
-    img_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if not image_data:
+        return []
+
+    try:
+        import io
+        from PIL import Image, ImageOps
+        pil_img = Image.open(io.BytesIO(image_data))
+        pil_img = ImageOps.exif_transpose(pil_img)  # apply EXIF rotation
+        pil_img = pil_img.convert("RGB")
+        img_bgr = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+    except Exception:
+        # Fallback to raw OpenCV decode if Pillow fails
+        arr = np.frombuffer(image_data, dtype=np.uint8)
+        img_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
     if img_bgr is None:
         return []   # not a valid image — caller raises 422
 
