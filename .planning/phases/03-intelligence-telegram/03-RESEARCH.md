@@ -821,28 +821,27 @@ const [ignoredOpen, setIgnoredOpen] = useState(false);
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`algorithm='kd_tree'` vs CONTEXT `boruvka_kdtree`**
    - What we know: sklearn 1.8.0 doesn't have `boruvka_kdtree`; standalone `hdbscan` package does
-   - What's unclear: Whether the user wants to add the standalone package or accept sklearn's `kd_tree` equivalent
-   - Recommendation: Use sklearn `kd_tree` — already installed, avoids new dependency; flag in plan comments
+   - **RESOLVED:** Use `algorithm="kd_tree"` (sklearn). `boruvka_kdtree` is a standalone hdbscan package parameter name that does not exist in `sklearn.cluster.HDBSCAN` and would raise `ValueError` at runtime. No new dependency needed.
 
 2. **`CLUSTER_MIN_SIZE` env var default**
    - `.env.example` has `CLUSTER_MIN_SIZE=3` but CONTEXT locked decision says `min_cluster_size=5`
-   - Recommendation: Update `.env.example` default to 5 to match locked decision; make it configurable via env var
+   - **RESOLVED:** Update `.env.example` to `CLUSTER_MIN_SIZE=5` (matches locked CONTEXT decision). Configurable via env var.
 
 3. **Noise face_detections: set `unknown_cluster_id = NULL` or leave?**
    - HDBSCAN label=-1 faces are "noise" — should their `unknown_cluster_id` be cleared on re-run?
-   - Recommendation: Set `unknown_cluster_id = NULL WHERE id = ANY(noise_ids)` on each run to keep DB clean
+   - **RESOLVED:** Clear on each run — `UPDATE face_detections SET unknown_cluster_id = NULL WHERE matched_person_id IS NULL` before re-assigning. Keeps DB consistent.
 
 4. **`GET /clusters?include_ignored=true` vs separate endpoint**
    - CONTEXT says "GET /clusters?include_ignored=true — for the collapsed section"
-   - Recommendation: Single endpoint with optional query param; simpler to cache in TanStack Query
+   - **RESOLVED:** Single `GET /clusters` endpoint with optional `include_ignored: bool = False` query param. Simpler TanStack Query caching.
 
 5. **Digest when clusters > 10**
    - CONTEXT: max 10 photos per sendMediaGroup. What if 15 active clusters exist?
-   - Recommendation: Send top 10 by `appearance_count DESC`; log how many were omitted. V2 can paginate.
+   - **RESOLVED:** Send top 10 ordered by `appearance_count DESC`; log the number of omitted clusters. V2 can paginate with multiple albums.
 
 ---
 
