@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://api:8000/cluster/run",
+        "url": "http://homevideosearcher-api-1:8000/cluster/run",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
@@ -51,7 +51,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://api:8000/digest/send",
+        "url": "http://homevideosearcher-api-1:8000/digest/send",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
