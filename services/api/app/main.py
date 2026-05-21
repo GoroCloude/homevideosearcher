@@ -65,3 +65,7 @@ app.include_router(frames_router)   # public — presigned MinIO URL is self-sec
 from .clustering import router as clustering_router
 
 app.include_router(clustering_router, dependencies=[Depends(require_token)])
+
+from .digest import router as digest_router
+
+app.include_router(digest_router, dependencies=[Depends(require_token)])
