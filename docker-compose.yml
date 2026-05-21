@@ -68,6 +68,8 @@ services:
       CLUSTER_MIN_SIZE: ${CLUSTER_MIN_SIZE:-5}
       CLUSTER_MIN_SAMPLES: ${CLUSTER_MIN_SAMPLES:-2}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "${API_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
