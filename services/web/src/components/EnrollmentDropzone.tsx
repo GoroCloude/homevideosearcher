@@ -66,11 +66,14 @@ export default function EnrollmentDropzone({ personId, onSuccess }: Props) {
         const originalFiles = files;
         return prev.filter((_, i) => rejectedNames.has(originalFiles[i]?.name ?? ''));
       });
-      onSuccess?.(result.enrolled);
       addToast(
         `${result.enrolled} photo${result.enrolled !== 1 ? 's' : ''} enrolled successfully`,
         'success'
       );
+      // Only close the dropzone when ALL photos succeeded (no rejections to show)
+      if (result.rejected.length === 0) {
+        onSuccess?.(result.enrolled);
+      }
     }
   }
 

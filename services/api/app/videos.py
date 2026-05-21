@@ -65,13 +65,13 @@ async def list_videos(page: int = 1, page_size: int = 50) -> VideoListResponse:
                 COUNT(DISTINCT f.id)  AS frame_count,
                 COUNT(DISTINCT d.id)  AS detection_count,
                 COUNT(DISTINCT fd.id) AS face_count,
-                v.created_at::text    AS ingested_at
+                v.ingested_at::text   AS ingested_at
             FROM videos v
             LEFT JOIN frames         f  ON f.video_id = v.id
             LEFT JOIN detections     d  ON d.frame_id = f.id
             LEFT JOIN face_detections fd ON fd.frame_id = f.id
             GROUP BY v.id
-            ORDER BY v.created_at DESC
+            ORDER BY v.ingested_at DESC
             LIMIT $1 OFFSET $2
             """,
             page_size, offset
