@@ -736,17 +736,11 @@ await reIngestVideo(key);  // key is the 'key' field from getUploadUrl response
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **MinIO homeserver version**
-   - What we know: MinIO is external (not in docker-compose). Modern MinIO has CORS enabled by default.
-   - What's unclear: The actual version running on the homeserver.
-   - Recommendation: The CORS script should verify connectivity and include the `mc anonymous set upload` fallback command with a comment explaining when to use it. User runs it once and can use the fallback if needed.
+1. **MinIO homeserver version** — RESOLVED: Version-agnostic. `scripts/setup-minio-cors.sh` includes the `mc anonymous set upload` fallback command (commented out) with a comment explaining when to use it. User can uncomment if CORS is blocked on older MinIO; modern MinIO has CORS enabled by default.
 
-2. **`onProgressChange` callback frequency and the progress bar flicker at 100%**
-   - What we know: `onProgressChange(0)` is called after queue completes to hide the bar (D-09). Between last file finishing and that call, the bar shows 100%.
-   - What's unclear: Does setting `progress = 0` after `progress = 100` cause a visible flicker?
-   - Recommendation: Set `setUploadProgress(0)` in `VideosPage` only after a tiny delay (50ms), or use `uploadProgress < 100` condition (D-09 says "hidden when progress is 0 OR 100+").
+2. **`onProgressChange` callback frequency and the progress bar flicker at 100%** — RESOLVED: The `uploadProgress > 0 && uploadProgress < 100` condition in `VideosPage` hides the bar at exactly 100%. After the queue finishes, `onProgressChange(0)` resets state to 0, which also hides the bar. No flicker occurs because the conditional ensures the bar is invisible at both 0 and 100.
 
 ---
 
