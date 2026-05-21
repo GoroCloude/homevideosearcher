@@ -114,8 +114,10 @@ Plans:
 **Requirements covered:**
 - UPLOAD-01, UPLOAD-02, UPLOAD-03, UPLOAD-04, UPLOAD-05, UPLOAD-06
 
-**Plans:**
-1. Video Upload — `POST /api/videos/upload-url` endpoint + `generate_presigned_upload_url` helper in `storage.py`; `VideoUploadButton` component with file picker, sequential queue, XHR progress, and toast feedback; auto-ingest trigger after each successful PUT; video list invalidation
+**Plans:** 1 plan
+
+Plans:
+- [ ] 05-01-PLAN.md — Backend presigned PUT URL endpoint + storage helper + frontend VideoUploadButton component with XHR queue/progress + VideosPage integration + CORS setup script
 
 **Done when:**
 - [ ] `POST /api/videos/upload-url` returns a presigned PUT URL; unauthenticated request returns 401
