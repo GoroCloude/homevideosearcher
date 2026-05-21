@@ -44,3 +44,16 @@ curl http://localhost:8001/health   # ingestion-worker
 ## Hardware
 
 Designed for CPU-only inference: i5-6200, 8 GB RAM. Requires 4 GB swap file.
+
+## Phase 5: Video Upload — Deployment
+
+After deploying Phase 5, run the MinIO CORS verification script once:
+
+```bash
+# Set your MinIO alias and bucket name as env vars (or use the defaults)
+MINIO_ALIAS=myminio MINIO_BUCKET=videos bash scripts/setup-minio-cors.sh
+```
+
+MinIO has CORS enabled by default on modern versions — this script verifies connectivity
+and bucket access. If you see CORS errors when uploading videos from the browser,
+uncomment the `mc anonymous set upload` line in the script and re-run it.

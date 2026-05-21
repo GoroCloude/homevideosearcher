@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { useVideos, useReIngestVideo } from '../api/videos';
 import { useSettings } from '../context/SettingsContext';
 import StatusBadge from '../components/StatusBadge';
+import VideoUploadButton from '../components/VideoUploadButton';
 
 function shortKey(minioKey: string): string {
   return minioKey.split('/').pop() ?? minioKey;
@@ -23,6 +25,8 @@ export default function VideosPage() {
   const reIngest = useReIngestVideo();
 
   const [reingestingId, setReingestingId] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // No-token banner
   if (!settings.apiToken) {
@@ -49,10 +53,27 @@ export default function VideosPage() {
     <div className="p-4 md:p-6">
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-lg font-semibold text-gray-900">Videos</h1>
-        {data && (
-          <span className="text-sm text-gray-500">{data.total} video{data.total !== 1 ? 's' : ''}</span>
-        )}
+        <div className="flex items-center gap-3">
+          {data && (
+            <span className="text-sm text-gray-500">{data.total} video{data.total !== 1 ? 's' : ''}</span>
+          )}
+          <VideoUploadButton
+            onUploadComplete={() => qc.invalidateQueries({ queryKey: ['videos'] })}
+            onProgressChange={setUploadProgress}
+          />
+        </div>
       </div>
+
+      {/* Progress bar — D-07: h-1 thin bar between header row and table content.
+          D-09: only rendered when pct > 0 (hidden when idle or after queue resets to 0). */}
+      {uploadProgress > 0 && uploadProgress < 100 && (
+        <div className="h-1 w-full bg-gray-200 rounded-full mb-5 overflow-hidden">
+          <div
+            className="h-1 bg-blue-500 rounded-full transition-all duration-150"
+            style={{ width: `${uploadProgress}%` }}
+          />
+        </div>
+      )}
 
       {/* Loading */}
       {isLoading && (
