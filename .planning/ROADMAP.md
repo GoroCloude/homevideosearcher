@@ -107,6 +107,27 @@ Plans:
 
 ---
 
+## Phase 5: Video Upload UI
+
+**Goal:** Users can upload video files directly from the Videos page; each file goes to MinIO via a presigned PUT URL and ingestion starts automatically — without requiring MinIO console access.
+
+**Requirements covered:**
+- UPLOAD-01, UPLOAD-02, UPLOAD-03, UPLOAD-04, UPLOAD-05, UPLOAD-06
+
+**Plans:**
+1. Video Upload — `POST /api/videos/upload-url` endpoint + `generate_presigned_upload_url` helper in `storage.py`; `VideoUploadButton` component with file picker, sequential queue, XHR progress, and toast feedback; auto-ingest trigger after each successful PUT; video list invalidation
+
+**Done when:**
+- [ ] `POST /api/videos/upload-url` returns a presigned PUT URL; unauthenticated request returns 401
+- [ ] "Upload Video" button appears at the top-right of the Videos page
+- [ ] Selecting a file > 1 GB shows a toast error with zero network requests made
+- [ ] Upload progress (%) is visible while a file uploads directly to MinIO
+- [ ] Multiple files upload sequentially (second does not start before first finishes)
+- [ ] After upload, `POST /ingest-api/ingest` is called automatically; video appears in list with `processing`/`done` status within 10 seconds
+- [ ] Uploading a duplicate filename overwrites the MinIO object and re-processes it
+
+---
+
 ## Coverage
 
 | Requirement Group | Count | Phase |
@@ -121,7 +142,8 @@ Plans:
 | CLUSTER-01 – CLUSTER-05 | 5 | 3 |
 | NOTIF-01 – NOTIF-05 | 5 | 3 |
 | WEB-01 – WEB-07 | 7 | 4 |
-| **Total** | **52** | ✓ all mapped |
+| UPLOAD-01 – UPLOAD-06 | 6 | 5 |
+| **Total** | **58** | ✓ all mapped |
 
 > Note: count is 52 (8+6+4+5+5+5+2+5+5+7). REQUIREMENTS.md traceability table states 51 — one may be an off-by-one in that section. All named requirements above are explicitly listed in REQUIREMENTS.md and are fully covered.
 
@@ -135,6 +157,7 @@ Plans:
 | 2 — Enrollment, Search & Automation | 3 | ✅ Complete | 3/3 |
 | 3 — Intelligence & Telegram Digest | 2 | ✅ Complete | 2/2 |
 | 4 — Web UI | 4 | ✅ Complete | 4/4 |
+| 5 — Video Upload UI | 1 | 🔲 Not started | 0/1 |
 
 ---
 *Roadmap created: 2026-05-16*

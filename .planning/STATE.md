@@ -2,9 +2,9 @@
 
 ## Current Status
 
-**Phase:** 4 — Web UI ✅ COMPLETE  
+**Phase:** 5 — Video Upload UI 🔲 NOT STARTED  
 **Active plan:** —  
-**Last action:** Phase 4 Plan 04 executed — ClusterCard + ClustersPage (Phase-3 empty state), Toast system (module-level singleton), SettingsPage (token + Test Connection), mobile polish verified (z-30 nav, pb-16 main, sr-only labels). Phase 4 complete — all 4 plans done.
+**Last action:** Phase 5 SPEC.md created — users can upload videos directly from the Videos page UI via presigned MinIO PUT, with auto-ingest and progress bar.
 
 ## Project Reference
 
@@ -15,7 +15,7 @@ See: .planning/PROJECT.md (updated 2026-05-16)
 
 ## Next Step
 
-Phase 4 complete. All 7 WEB requirements implemented. Deployment and end-to-end testing next.
+Phase 5 SPEC.md written. Run `/gsd-discuss-phase 5` to make implementation decisions (component design, XHR vs fetch, CORS setup, nginx config).
 
 ## Phase Snapshot
 
@@ -24,7 +24,8 @@ Phase 4 complete. All 7 WEB requirements implemented. Deployment and end-to-end 
 | 1 — Foundation | Docker Compose stack ingests video, runs YOLO + InsightFace, writes to DB | ✅ Complete |
 | 2 — Enrollment, Search & Automation | Enroll persons, search footage, n8n auto-trigger | ✅ Complete |
 | 3 — Intelligence & Telegram Digest | HDBSCAN clustering, stable cluster UUIDs, Telegram album digest | ✅ Complete |
-| 4 — Web UI | React UI for search, persons, clusters, settings | 🔄 In Progress (Plan 01/04 done) |
+| 4 — Web UI | React UI for search, persons, clusters, settings | ✅ Complete |
+| 5 — Video Upload UI | Upload videos from browser → MinIO → auto-ingest | 🔲 Not started |
 
 ## Decisions
 
