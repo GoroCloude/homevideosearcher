@@ -19,7 +19,7 @@ See: .planning/PROJECT.md (updated 2026-05-16)
 
 ## Next Step
 
-Phase 3 complete. Deploy to homeserver: `ssh goro@homeserver`, apply DB migration, `git pull`, rebuild `api` + `web`, redeploy. Then add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to homeserver .env.
+v1.0 milestone archived and tagged. Run `/gsd-new-milestone` to start planning v2.0.
 
 ## Phase Snapshot
 

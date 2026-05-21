@@ -1,5 +1,21 @@
 # HomeVideoSearcher
 
+## Current State (v1.0 — Shipped 2026-05-21)
+
+**v1.0 MVP is live.** All 5 phases complete. Deployed on Ubuntu homeserver (i5-6200, 8 GB RAM, CPU-only), exposed via Cloudflare Tunnel at `homevideosearcher.shumov.eu`.
+
+**What's running:**
+- Video ingestion pipeline (FFmpeg + YOLO + InsightFace, all CPU-only)
+- Face enrollment and pgvector similarity search
+- HDBSCAN nightly clustering of unknown faces (5 clusters confirmed live)
+- Telegram digest via `@gorohomealert_bot` — sends cluster photo albums
+- React web UI: search, people, clusters, video upload
+- n8n 8am daily cron: cluster/run → digest/send
+
+**Next milestone:** Not yet defined. Run `/gsd-new-milestone` to plan v2.0.
+
+---
+
 ## What This Is
 
 A self-hosted home security and family archive system that indexes video footage from home cameras, detects objects (cars, people, animals), recognizes enrolled family faces, and groups unknown faces. Users receive a daily Telegram digest when unrecognized persons appear, and can browse/search footage through a web UI.
@@ -12,22 +28,19 @@ Automatically surface unknown faces from home camera footage and notify via Tele
 
 ## Requirements
 
-### Validated
+### Validated (v1.0)
 
-(None yet — ship to validate)
-
-### Active
-
-- [ ] Index video files from MinIO (with import path from disk/NAS)
-- [ ] Detect objects per frame: person, car, animal (COCO subset)
-- [ ] Detect and embed all faces per frame (known and unknown)
-- [ ] Enroll known persons (family members) with reference images
-- [ ] Cluster unknown faces across videos so recurring strangers are grouped
-- [ ] Daily Telegram digest listing unknown face clusters that appeared in the past 24 h, with thumbnail
-- [ ] Web UI: search by enrolled person, object class, date range; jump to video timestamp
-- [ ] Web UI: manage enrolled persons (add, delete, upload reference images)
-- [ ] Web UI: browse and label unknown face clusters (promote to known person)
-- [ ] Single bearer-token auth; single-user / family use case
+- [x] Index video files from MinIO (with import path from disk/NAS)
+- [x] Detect objects per frame: person, car, animal (COCO subset)
+- [x] Detect and embed all faces per frame (known and unknown)
+- [x] Enroll known persons (family members) with reference images
+- [x] Cluster unknown faces across videos so recurring strangers are grouped
+- [x] Daily Telegram digest listing unknown face clusters with thumbnails
+- [x] Web UI: search by enrolled person, object class, date range; jump to video timestamp
+- [x] Web UI: manage enrolled persons (add, delete, upload reference images)
+- [x] Web UI: browse and label unknown face clusters (promote to known person)
+- [x] Web UI: upload video files directly from browser
+- [x] Single bearer-token auth; single-user / family use case
 
 ### Out of Scope
 
@@ -41,41 +54,34 @@ Automatically surface unknown faces from home camera footage and notify via Tele
 ## Context
 
 - **Existing infra:** MinIO (object storage), n8n (workflow orchestration), Cloudflare Tunnel — all already running
-- **Video source:** Home camera recordings currently on disk/NAS; must be imported into MinIO before indexing
+- **Video source:** Home camera recordings currently on disk/NAS; imported into MinIO before indexing
 - **Hardware constraint:** i5-6200 CPU, 8 GB RAM, no GPU — CPU-only ONNX inference; tight on memory, sequential ML processing required
-- **Primary trigger for notifications:** unknown/unfamiliar face in footage (security); secondary: finding family member appearances (archive)
-- **Unknown faces:** must be clustered in v1 (user explicitly needs grouping to spot recurring strangers)
 - **Processing latency:** overnight batch is acceptable; no real-time requirement
+- **Telegram bot:** `@gorohomealert_bot`, chat ID `8327914287`
 
 ## Constraints
 
 - **Hardware:** CPU-only, 8 GB RAM — limits batch size; YOLO and InsightFace must run sequentially per frame; swap file recommended
-- **Tech stack:** Fixed (see requirements.md §3): Python 3.11, FastAPI, YOLOv8, InsightFace buffalo_l, PostgreSQL 16 + pgvector, React 18 + Vite + TypeScript, Tailwind CSS, Docker Compose
+- **Tech stack:** Python 3.11, FastAPI, YOLOv8, InsightFace buffalo_l, PostgreSQL 16 + pgvector, React 18 + Vite + TypeScript, Tailwind CSS v3, Docker Compose
 - **Embedding dimensions:** InsightFace ArcFace produces 512-dim embeddings; pgvector HNSW index required
-- **Face match threshold:** ≥ 0.5 cosine similarity for confident match (buffalo_l)
-- **Frame rate:** 1 fps extraction + scene-change frames; ~0.3–0.5× realtime processing expected
+- **Frame rate:** 1 fps extraction + scene-change frames
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Unknown face clustering in v1 | User explicitly wants to spot recurring strangers — store-individually approach doesn't serve the use case | — Pending |
-| Telegram daily digest as core feature | Primary value is knowing when unknowns appear; not just a nice-to-have | — Pending |
-| Overnight batch processing | i5-6200 is too slow for real-time; daily digest latency is acceptable | — Pending |
-| InsightFace buffalo_l over buffalo_s | Higher accuracy for family recognition; false matches are annoying in personal use | — Pending |
-| pgvector HNSW index for embeddings | Efficient approximate nearest neighbor for face matching at scale | — Pending |
-| MinIO as primary video storage | Already running; integrates with n8n for trigger workflows | — Pending |
+| Unknown face clustering in v1 | User explicitly wants to spot recurring strangers | ✓ Validated — 5 clusters found in first run |
+| Telegram daily digest as core feature | Primary value is knowing when unknowns appear | ✓ Validated — working live |
+| Overnight batch processing | i5-6200 is too slow for real-time; daily digest latency is acceptable | ✓ Validated |
+| InsightFace buffalo_l over buffalo_s | Higher accuracy for family recognition | ✓ Validated |
+| pgvector HNSW index for embeddings | Efficient approximate nearest neighbor for face matching | ✓ Validated |
+| MinIO as primary video storage | Already running; integrates with n8n for trigger workflows | ✓ Validated |
+| HDBSCAN `algorithm='kd_tree'` (sklearn) | sklearn uses different param name than standalone hdbscan package | ✓ Corrected during Phase 3 |
+| `POST /clusters/{id}/promote` (not rematch) | Rematch requires existing embeddings; new persons don't have any | ✓ Fixed Phase 3 ClusterCard flow |
+| Separate `_public_client` for presigned URLs | Internal Docker hostname not browser-resolvable | ✓ Good |
+| Module-level toast singleton (not React context) | `addToast()` must work outside components | ✓ Good |
 
 ## Evolution
-
-This document evolves at phase transitions and milestone boundaries.
-
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
 
 **After each milestone** (via `/gsd-complete-milestone`):
 1. Full review of all sections
@@ -84,4 +90,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-16 after initialization*
+*Last updated: 2026-05-21 — v1.0 shipped*
