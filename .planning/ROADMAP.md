@@ -117,16 +117,16 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 05-01-PLAN.md — Backend presigned PUT URL endpoint + storage helper + frontend VideoUploadButton component with XHR queue/progress + VideosPage integration + CORS setup script
+- [x] 05-01-PLAN.md — Backend presigned PUT URL endpoint + storage helper + frontend VideoUploadButton component with XHR queue/progress + VideosPage integration + CORS setup script
 
 **Done when:**
-- [ ] `POST /api/videos/upload-url` returns a presigned PUT URL; unauthenticated request returns 401
-- [ ] "Upload Video" button appears at the top-right of the Videos page
-- [ ] Selecting a file > 1 GB shows a toast error with zero network requests made
-- [ ] Upload progress (%) is visible while a file uploads directly to MinIO
-- [ ] Multiple files upload sequentially (second does not start before first finishes)
-- [ ] After upload, `POST /ingest-api/ingest` is called automatically; video appears in list with `processing`/`done` status within 10 seconds
-- [ ] Uploading a duplicate filename overwrites the MinIO object and re-processes it
+- [x] `POST /api/videos/upload-url` returns a presigned PUT URL; unauthenticated request returns 401
+- [x] "Upload Video" button appears at the top-right of the Videos page
+- [x] Selecting a file > 1 GB shows a toast error with zero network requests made
+- [x] Upload progress (%) is visible while a file uploads directly to MinIO
+- [x] Multiple files upload sequentially (second does not start before first finishes)
+- [x] After upload, `POST /ingest-api/ingest` is called automatically; video appears in list with `processing`/`done` status within 10 seconds
+- [x] Uploading a duplicate filename overwrites the MinIO object and re-processes it
 
 ---
 
@@ -159,7 +159,7 @@ Plans:
 | 2 — Enrollment, Search & Automation | 3 | ✅ Complete | 3/3 |
 | 3 — Intelligence & Telegram Digest | 2 | ✅ Complete | 2/2 |
 | 4 — Web UI | 4 | ✅ Complete | 4/4 |
-| 5 — Video Upload UI | 1 | 🔲 Not started | 0/1 |
+| 5 — Video Upload UI | 1 | ✅ Complete | 1/1 |
 
 ---
 *Roadmap created: 2026-05-16*

@@ -2,20 +2,20 @@
 
 ## Current Status
 
-**Phase:** 5 — Video Upload UI 🔲 NOT STARTED  
+**Phase:** 5 — Video Upload UI ✅ COMPLETE  
 **Active plan:** —  
-**Last action:** Phase 5 SPEC.md created — users can upload videos directly from the Videos page UI via presigned MinIO PUT, with auto-ingest and progress bar.
+**Last action:** Phase 5 complete — users can upload videos directly from the Videos page UI via presigned MinIO PUT, with auto-ingest and progress bar.
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-16)
 
 **Core value:** Automatically surface unknown faces from home camera footage and notify via daily Telegram digest  
-**Current focus:** Phase 4 — Web UI
+**Current focus:** Phase 5 — Video Upload UI (complete)
 
 ## Next Step
 
-Phase 5 SPEC.md written. Run `/gsd-discuss-phase 5` to make implementation decisions (component design, XHR vs fetch, CORS setup, nginx config).
+Phase 5 complete. Deploy to homeserver: `ssh goro@homeserver`, `git pull`, `docker compose build && docker compose up -d`.
 
 ## Phase Snapshot
 
@@ -25,7 +25,7 @@ Phase 5 SPEC.md written. Run `/gsd-discuss-phase 5` to make implementation decis
 | 2 — Enrollment, Search & Automation | Enroll persons, search footage, n8n auto-trigger | ✅ Complete |
 | 3 — Intelligence & Telegram Digest | HDBSCAN clustering, stable cluster UUIDs, Telegram album digest | ✅ Complete |
 | 4 — Web UI | React UI for search, persons, clusters, settings | ✅ Complete |
-| 5 — Video Upload UI | Upload videos from browser → MinIO → auto-ingest | 🔲 Not started |
+| 5 — Video Upload UI | Upload videos from browser → MinIO → auto-ingest | ✅ Complete |
 
 ## Decisions
 
