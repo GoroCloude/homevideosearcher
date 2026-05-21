@@ -145,9 +145,10 @@ async def run_clustering() -> ClusterRunResponse:
                 fd.normed_embedding,
                 fd.unknown_cluster_id::text,
                 fd.det_score,
-                fr.created_at AS frame_ts
+                COALESCE(v.recorded_at, v.ingested_at) AS frame_ts
             FROM face_detections fd
             JOIN frames fr ON fr.id = fd.frame_id
+            JOIN videos v  ON v.id  = fr.video_id
             WHERE fd.matched_person_id IS NULL
               AND fd.normed_embedding IS NOT NULL
         """)
