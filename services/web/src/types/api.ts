@@ -102,3 +102,9 @@ export interface ClusterItem {
   last_seen:               string | null;
   thumbnail_url:           string | null;  // "/frames/{id}/image"
 }
+
+export interface UploadUrlResponse {
+  url:        string;   // presigned MinIO PUT URL — XHR sends file bytes directly here (no auth header needed)
+  key:        string;   // MinIO object key e.g. "videos/video.mp4" — pass to reIngestVideo()
+  expires_in: number;   // URL lifetime in seconds (3600)
+}
