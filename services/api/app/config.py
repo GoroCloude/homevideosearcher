@@ -18,3 +18,11 @@ API_TOKEN:                 str   = os.environ["API_TOKEN"]           # fail-fast
 FACE_MATCH_HIGH_THRESHOLD: float = float(os.getenv("FACE_MATCH_HIGH_THRESHOLD", "0.65"))
 FACE_MATCH_LOW_THRESHOLD:  float = float(os.getenv("FACE_MATCH_LOW_THRESHOLD", "0.50"))
 LOG_LEVEL:                 str   = os.getenv("LOG_LEVEL", "INFO").upper()
+
+# ── Telegram digest (Phase 3) ─────────────────────────────────────────────────
+TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")   # empty = digest disabled
+TELEGRAM_CHAT_ID:   str = os.getenv("TELEGRAM_CHAT_ID",   "")   # empty = digest disabled
+
+# ── HDBSCAN clustering (Phase 3) ─────────────────────────────────────────────
+CLUSTER_MIN_SIZE:    int = int(os.getenv("CLUSTER_MIN_SIZE",    "5"))
+CLUSTER_MIN_SAMPLES: int = int(os.getenv("CLUSTER_MIN_SAMPLES", "2"))
