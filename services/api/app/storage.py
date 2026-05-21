@@ -64,3 +64,20 @@ def generate_presigned_url(bucket: str, key: str, expires_hours: int = 1) -> str
     )
     logger.debug("Generated presigned URL for %s/%s (TTL=%dh)", bucket, key, expires_hours)
     return url
+
+
+def generate_presigned_upload_url(bucket: str, key: str, expires_minutes: int = 60) -> str:
+    """
+    Generate a presigned PUT URL valid for expires_minutes minutes.
+    MUST use get_public_minio_client() so the returned URL uses MINIO_PUBLIC_ENDPOINT
+    and is browser-resolvable. Never use get_minio_client() here — that uses the internal
+    Docker hostname which the browser cannot resolve.
+    """
+    client = get_public_minio_client()
+    url = client.presigned_put_object(
+        bucket_name=bucket,
+        object_name=key,
+        expires=timedelta(minutes=expires_minutes),
+    )
+    logger.debug("Generated presigned PUT URL for %s/%s (TTL=%dm)", bucket, key, expires_minutes)
+    return url

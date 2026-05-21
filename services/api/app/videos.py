@@ -7,6 +7,7 @@ Returns a 302 redirect to a MinIO presigned URL (1 h TTL).
 Presigned URL is generated on-demand at redirect time — NOT stored anywhere.
 """
 import logging
+import os
 from typing import List, Optional
 from uuid import UUID
 
@@ -16,7 +17,7 @@ from pydantic import BaseModel
 
 from . import config
 from .db import get_pool
-from .storage import generate_presigned_url
+from .storage import generate_presigned_url, generate_presigned_upload_url
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,41 @@ class VideoListResponse(BaseModel):
 
 class StreamUrlResponse(BaseModel):
     url: str
+
+
+class UploadUrlRequest(BaseModel):
+    filename: str  # original filename from browser; sanitized server-side before use
+
+class UploadUrlResponse(BaseModel):
+    url: str        # presigned PUT URL — browser sends video bytes directly to this URL
+    key: str        # MinIO object key, e.g. "videos/video.mp4" — pass to POST /ingest-api/ingest
+    expires_in: int  # seconds until URL expires (always 3600)
+
+
+@router.post("/upload-url", response_model=UploadUrlResponse)
+async def get_upload_url(body: UploadUrlRequest) -> UploadUrlResponse:
+    """
+    Returns a presigned MinIO PUT URL for direct browser → MinIO upload.
+    Auth: inherited from videos_router registration with Depends(require_token) in main.py.
+
+    Security — T1 (path traversal): filename sanitized with os.path.basename before building key.
+    Security — T2 (scope leak): key always prefixed with 'videos/' — prefix is never user-controlled.
+    Security — T3 (unauth access): require_token dependency on router; no code change needed.
+    """
+    # T1: Strip all path separators (handles both / from POSIX and \ from Windows browsers).
+    # Replace backslashes first so os.path.basename sees a forward-slash path.
+    safe_name = os.path.basename(body.filename.replace("\\", "/")).strip()
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # T2: Hardcoded 'videos/' prefix — user cannot set the bucket or path prefix.
+    key = f"videos/{safe_name}"
+    url = generate_presigned_upload_url(
+        bucket=config.MINIO_BUCKET_VIDEOS,
+        key=key,
+        expires_minutes=60,
+    )
+    return UploadUrlResponse(url=url, key=key, expires_in=3600)
 
 
 @router.get("", response_model=VideoListResponse)
