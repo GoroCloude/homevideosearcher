@@ -67,9 +67,12 @@
 - CLUSTER-01, CLUSTER-02, CLUSTER-03, CLUSTER-04, CLUSTER-05
 - NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, NOTIF-05
 
-**Plans:**
-1. Unknown Face Clustering — Nightly batch (triggered by n8n cron at 02:00 via `POST /cluster/run`, hosted inside `api`): load all `matched_person_id = NULL` embeddings; run HDBSCAN (`metric='euclidean'`, `algorithm='boruvka_kdtree'`, `min_cluster_size=3`, `min_samples=2`); assign stable UUIDs to new clusters; update existing cluster memberships incrementally (no UUID churn); each cluster records representative face (highest det_score + sharpest image) and appearance count; promoting a cluster to a known person triggers bulk SQL UPDATE of all member `face_detections`
-2. Telegram Digest — `POST /digest/send` (inside `api`) composes and sends the nightly digest: unknown clusters with first appearance in past 24 h; uses `sendMediaGroup` to send a single album (≤10 photos per message) with cluster representative thumbnail + caption (appearance count, video dates); no message sent if no new clusters; Telegram Bot token and chat ID from env vars
+**Plans:** 3 plans
+
+Plans:
+- [x] 03-01-PLAN.md — DB migration (ignored + promoted_at columns) + HDBSCAN clustering engine (POST /cluster/run, GET /clusters, ignore/restore/promote endpoints) + main.py wiring
+- [x] 03-02-PLAN.md — Telegram digest (POST /digest/send, sendMediaGroup with MinIO bytes) + n8n workflow JSON (8am cron → cluster/run → digest/send)
+- [x] 03-03-PLAN.md — React UI: ClusterItem type extension, new API hooks (promote/ignore/restore), ClusterCard enroll→promote + noise button, ClustersPage collapsed Ignored section
 
 **Done when:**
 - [ ] `POST /cluster/run` groups unknown face embeddings into clusters; each cluster has a stable UUID, a representative thumbnail, and an appearance count stored in `unknown_clusters`

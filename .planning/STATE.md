@@ -2,20 +2,24 @@
 
 ## Current Status
 
-**Phase:** 5 — Video Upload UI ✅ COMPLETE  
+**Phase:** 3 — Intelligence & Telegram Digest ✅ COMPLETE  
 **Active plan:** —  
-**Last action:** Phase 5 complete — users can upload videos directly from the Videos page UI via presigned MinIO PUT, with auto-ingest and progress bar.
+**Last action:** Phase 3 complete — HDBSCAN clustering engine, cluster management endpoints (ignore/restore/promote), Telegram sendMediaGroup digest, React UI promote/noise/restore wired, n8n 8am cron workflow.
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-05-16)
 
 **Core value:** Automatically surface unknown faces from home camera footage and notify via daily Telegram digest  
-**Current focus:** Phase 5 — Video Upload UI (complete)
+**Current focus:** Phase 3 — Intelligence & Telegram Digest (complete)
+
+- Phase 3 cluster management: POST /clusters/{id}/ignore sets ignored=true (reversible via DELETE); POST /clusters/{id}/promote bulk-updates face_detections.matched_person_id for all cluster members (no full-library rematch)
+- Phase 3 Telegram digest: MinIO bytes fetched internally (not presigned URLs — Telegram servers can't reach Docker network); BytesIO.seek(0) required before InputMediaPhoto
+- Phase 3 HDBSCAN: sklearn uses algorithm='kd_tree' (not 'boruvka_kdtree' which is standalone hdbscan package — ValueError at runtime); min_cluster_size=5, min_samples=2
 
 ## Next Step
 
-Phase 5 complete. Deploy to homeserver: `ssh goro@homeserver`, `git pull`, `docker compose build && docker compose up -d`.
+Phase 3 complete. Deploy to homeserver: `ssh goro@homeserver`, apply DB migration, `git pull`, rebuild `api` + `web`, redeploy. Then add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to homeserver .env.
 
 ## Phase Snapshot
 
@@ -47,7 +51,7 @@ Phase 5 complete. Deploy to homeserver: `ssh goro@homeserver`, `git pull`, `dock
 ### Architecture constraints (non-negotiable)
 - Two-tier face threshold (≥0.65 confident / 0.50–0.65 probable) must be encoded in schema/config from day 1 — cannot be retrofitted
 - `face_detections.unknown_cluster_id` column and `unknown_clusters` table must be in initial schema — not a later migration
-- HDBSCAN with `algorithm='boruvka_kdtree'`, `metric='euclidean'`, `min_cluster_size=3` — not DBSCAN, not cosine precomputed matrix
+- HDBSCAN with `algorithm='kd_tree'` (sklearn name for boruvka_kdtree), `metric='euclidean'`, `min_cluster_size=5`, `min_samples=2` — not DBSCAN, not cosine precomputed matrix
 - Stable cluster UUIDs required — cluster labels are never recreated, only updated incrementally
 - pgvector HNSW index: m=32, ef_construction=128, ef_search=64 — not defaults (default m=16 is suboptimal for 512-dim)
 - InsightFace buffalo_l model (~280 MB) baked into Docker image at build time — not downloaded at container startup
