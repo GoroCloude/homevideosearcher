@@ -2,28 +2,22 @@
 
 ## Current Status
 
-**Phase:** Phase 7 — Video Detail Page + Delete UI ✅ Complete  
-**Active plan:** none  
-**Last action:** Phase 7 complete — VideoDetailPage (metadata, player, detection/face tabs, timeline seek, delete dialog), VideosPage row-click nav + delete. Bug fix: detections/faces endpoints corrected for actual DB schema (class_name not label, bbox_x1-y2 not bbox_json, known_persons not persons, uc.label not uc.label_name).
+**Phase:** Not started (defining requirements)  
+**Active plan:** —  
+**Last action:** Milestone v2.0 started 2026-05-22 — Smart Labels, Person Pages & Auto-Ingest
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-21)
+See: .planning/PROJECT.md (updated 2026-05-22)
 
 **Core value:** Automatically surface unknown faces from home camera footage and notify via daily Telegram digest  
-**Current focus:** v1.1 — Video Detail Page + Hard Delete
-
-- Phase 3 cluster management: POST /clusters/{id}/ignore sets ignored=true (reversible via DELETE); POST /clusters/{id}/promote bulk-updates face_detections.matched_person_id for all cluster members (no full-library rematch)
-- Phase 3 Telegram digest: MinIO bytes fetched internally (not presigned URLs — Telegram servers can't reach Docker network); BytesIO.seek(0) required before InputMediaPhoto
-- Phase 3 HDBSCAN: sklearn uses algorithm='kd_tree' (not 'boruvka_kdtree' which is standalone hdbscan package — ValueError at runtime); min_cluster_size=5, min_samples=2
+**Current focus:** v2.0 — Smart Labels, Person Pages & Auto-Ingest
 
 ## Next Step
 
-v1.1 milestone complete (Phase 6 + Phase 7). Run `/gsd-complete-milestone` to archive, or `/gsd-new-milestone` to plan v1.2.
+Run `/gsd-plan-phase 8` to plan the first phase of v2.0.
 
-## Phase Snapshot
-
-| Phase | Goal | Status |
+## Phase SnapshotPhase | Goal | Status |
 |-------|------|--------|
 | 1 — Foundation | Docker Compose stack ingests video, runs YOLO + InsightFace, writes to DB | ✅ Complete |
 | 2 — Enrollment, Search & Automation | Enroll persons, search footage, n8n auto-trigger | ✅ Complete |
