@@ -19,6 +19,38 @@ function fmtDate(iso: string | null): string {
   catch { return iso; }
 }
 
+function dayKey(recorded: string | null, ingested: string): string {
+  const src = recorded ?? ingested;
+  try { return format(parseISO(src), 'yyyy-MM-dd'); }
+  catch { return ingested.slice(0, 10); }
+}
+
+function dayLabel(key: string): string {
+  try {
+    const d = parseISO(key);
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const yesterday = format(new Date(Date.now() - 86400000), 'yyyy-MM-dd');
+    if (key === today) return `Today · ${format(d, 'MMMM d, yyyy')}`;
+    if (key === yesterday) return `Yesterday · ${format(d, 'MMMM d, yyyy')}`;
+    return format(d, 'EEEE, MMMM d, yyyy');
+  } catch { return key; }
+}
+
+function groupByDay(videos: VideoListItem[]): Array<{ key: string; label: string; videos: VideoListItem[] }> {
+  const groups: Array<{ key: string; label: string; videos: VideoListItem[] }> = [];
+  const seen = new Map<string, (typeof groups)[0]>();
+  for (const v of videos) {
+    const key = dayKey(v.recorded_at, v.ingested_at);
+    if (!seen.has(key)) {
+      const g = { key, label: dayLabel(key), videos: [] as VideoListItem[] };
+      seen.set(key, g);
+      groups.push(g);
+    }
+    seen.get(key)!.videos.push(v);
+  }
+  return groups;
+}
+
 export default function VideosPage() {
   const { settings } = useSettings();
   const [page, setPage] = useState(1);
@@ -131,67 +163,80 @@ export default function VideosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {data.results.map(video => (
-                  <React.Fragment key={video.id}>
-                    <tr
-                      className="hover:bg-gray-50 transition-colors cursor-pointer"
-                      onClick={() => navigate(`/videos/${video.id}`)}
-                    >
-                      <td className="px-4 py-3 font-mono text-xs text-gray-700 max-w-xs truncate">
-                        {shortKey(video.minio_key)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={video.status} />
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">
-                        {video.frame_count.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">
-                        {video.detection_count.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 hidden md:table-cell">
-                        {video.face_count.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 hidden lg:table-cell whitespace-nowrap">
-                        {fmtDate(video.ingested_at)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleReIngest(video.id, video.minio_key); }}
-                            disabled={video.status === 'processing' || reingestingId === video.id}
-                            className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
-                          >
-                            {reingestingId === video.id ? 'Starting…' : 'Re-ingest'}
-                          </button>
-
-                          <button
-                            onClick={(e) => { e.stopPropagation(); navigate(`/videos/${video.id}`); }}
-                            className="text-gray-400 hover:text-gray-700 text-base leading-none"
-                            title="View detail"
-                            aria-label="View video detail"
-                          >
-                            ↗
-                          </button>
-
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(video.id); }}
-                            disabled={deleteMutation.isPending && deleteTarget === video.id}
-                            className="text-xs text-red-500 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
-                          >
-                            Delete
-                          </button>
-                        </div>
+                {groupByDay(data.results).map(group => (
+                  <React.Fragment key={group.key}>
+                    {/* Day group header */}
+                    <tr className="bg-gray-50 border-t-2 border-gray-200">
+                      <td colSpan={7} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        {group.label}
+                        <span className="ml-2 font-normal normal-case text-gray-400">
+                          {group.videos.length} video{group.videos.length !== 1 ? 's' : ''}
+                        </span>
                       </td>
                     </tr>
-                    {/* Error detail row */}
-                    {video.status === 'failed' && video.error_message && (
-                      <tr className="bg-red-50">
-                        <td colSpan={7} className="px-4 py-2 text-xs text-red-600">
-                          Error: {video.error_message}
-                        </td>
-                      </tr>
-                    )}
+                    {group.videos.map(video => (
+                      <React.Fragment key={video.id}>
+                        <tr
+                          className="hover:bg-gray-50 transition-colors cursor-pointer"
+                          onClick={() => navigate(`/videos/${video.id}`)}
+                        >
+                          <td className="px-4 py-3 font-mono text-xs text-gray-700 max-w-xs truncate">
+                            {shortKey(video.minio_key)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <StatusBadge status={video.status} />
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">
+                            {video.frame_count.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">
+                            {video.detection_count.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 hidden md:table-cell">
+                            {video.face_count.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 hidden lg:table-cell whitespace-nowrap">
+                            {fmtDate(video.ingested_at)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleReIngest(video.id, video.minio_key); }}
+                                disabled={video.status === 'processing' || reingestingId === video.id}
+                                className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
+                              >
+                                {reingestingId === video.id ? 'Starting…' : 'Re-ingest'}
+                              </button>
+
+                              <button
+                                onClick={(e) => { e.stopPropagation(); navigate(`/videos/${video.id}`); }}
+                                className="text-gray-400 hover:text-gray-700 text-base leading-none"
+                                title="View detail"
+                                aria-label="View video detail"
+                              >
+                                ↗
+                              </button>
+
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setDeleteTarget(video.id); }}
+                                disabled={deleteMutation.isPending && deleteTarget === video.id}
+                                className="text-xs text-red-500 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {/* Error detail row */}
+                        {video.status === 'failed' && video.error_message && (
+                          <tr className="bg-red-50">
+                            <td colSpan={7} className="px-4 py-2 text-xs text-red-600">
+                              Error: {video.error_message}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
                   </React.Fragment>
                 ))}
               </tbody>
