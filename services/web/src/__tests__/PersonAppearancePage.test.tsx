@@ -205,12 +205,12 @@ describe('PersonAppearancePage — data loaded', () => {
     mockNavigate.mockReset();
     renderPage();
 
-    // First video row (video-001, first_ts_ms=5000)
-    const rows = screen.getAllByText(/Mar 15, 2024/i);
-    // Click the parent button of the first match
-    const rowBtn = rows[0].closest('button');
-    expect(rowBtn).toBeTruthy();
-    fireEvent.click(rowBtn!);
+    // Find the video row button by its unique "First at 5.0s" subtitle text
+    // (present in video list rows, not in the header or timeline section)
+    const buttons = screen.getAllByRole('button');
+    const videoRowBtn = buttons.find(btn => btn.textContent?.includes('First at 5.0s'));
+    expect(videoRowBtn).toBeTruthy();
+    fireEvent.click(videoRowBtn!);
 
     expect(mockNavigate).toHaveBeenCalledWith('/videos/video-001?t=5000');
   });
