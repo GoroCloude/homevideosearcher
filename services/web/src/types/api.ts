@@ -144,3 +144,19 @@ export interface VideoFaceItem {
   person_name:      string;   // already resolved by API (e.g. "Alice" or "Unknown Cluster #3")
   appearance_count: number;
 }
+
+export interface VideoAppearance {
+  video_id:         string;
+  video_minio_key:  string;
+  recorded_at:      string | null;  // ISO datetime string — pass to parseISO() from date-fns
+  duration_sec:     number | null;
+  first_ts_ms:      number;         // lowest ts_ms for this person in this video
+  appearance_count: number;         // total face detections for this person in this video
+  thumbnail_url:    string;         // presigned URL — use directly in <img src>, no authFetch needed
+}
+
+export interface PersonAppearancesResponse {
+  person_id:   string;
+  person_name: string;
+  results:     VideoAppearance[];   // sorted newest-first by server; reverse for chronological timeline
+}
