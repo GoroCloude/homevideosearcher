@@ -27,7 +27,7 @@
 
 ### Phases
 
-- [ ] **Phase 8: Cluster Nickname Labeling** — Inline label on cluster cards; persists to DB; surfaces in Telegram digest
+- [x] **Phase 8: Cluster Nickname Labeling** — Inline label on cluster cards; persists to DB; surfaces in Telegram digest
 - [ ] **Phase 9: Person Appearance Page** — Click a person → see every video they appear in with timestamps and thumbnails
 - [ ] **Phase 10: Watch-Folder Auto-Ingest** — Daemon watches a local folder; new files are uploaded to MinIO and ingested automatically
 
