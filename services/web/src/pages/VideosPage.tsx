@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
-import { useVideos, useReIngestVideo } from '../api/videos';
+import { useVideos, useReIngestVideo, useDeleteVideo } from '../api/videos';
+import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
+import { addToast } from '../hooks/useToast';
 import { useSettings } from '../context/SettingsContext';
 import StatusBadge from '../components/StatusBadge';
 import VideoUploadButton from '../components/VideoUploadButton';
@@ -27,6 +29,9 @@ export default function VideosPage() {
   const [reingestingId, setReingestingId] = useState<string | null>(null);
   const qc = useQueryClient();
   const [uploadProgress, setUploadProgress] = useState(0);
+  const navigate = useNavigate();
+  const deleteMutation = useDeleteVideo();
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   // No-token banner
   if (!settings.apiToken) {
@@ -46,6 +51,16 @@ export default function VideosPage() {
       await reIngest.mutateAsync(minioKey);
     } finally {
       setReingestingId(null);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeleteTarget(null);
+    try {
+      await deleteMutation.mutateAsync(id);
+      addToast('Video deleted', 'success');
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Delete failed', 'error');
     }
   }
 
@@ -118,7 +133,10 @@ export default function VideosPage() {
               <tbody className="divide-y divide-gray-100">
                 {data.results.map(video => (
                   <React.Fragment key={video.id}>
-                    <tr className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/videos/${video.id}`)}
+                    >
                       <td className="px-4 py-3 font-mono text-xs text-gray-700 max-w-xs truncate">
                         {shortKey(video.minio_key)}
                       </td>
@@ -138,13 +156,32 @@ export default function VideosPage() {
                         {fmtDate(video.ingested_at)}
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleReIngest(video.id, video.minio_key)}
-                          disabled={video.status === 'processing' || reingestingId === video.id}
-                          className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
-                        >
-                          {reingestingId === video.id ? 'Starting…' : 'Re-ingest'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleReIngest(video.id, video.minio_key); }}
+                            disabled={video.status === 'processing' || reingestingId === video.id}
+                            className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
+                          >
+                            {reingestingId === video.id ? 'Starting…' : 'Re-ingest'}
+                          </button>
+
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigate(`/videos/${video.id}`); }}
+                            className="text-gray-400 hover:text-gray-700 text-base leading-none"
+                            title="View detail"
+                            aria-label="View video detail"
+                          >
+                            ↗
+                          </button>
+
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(video.id); }}
+                            disabled={deleteMutation.isPending && deleteTarget === video.id}
+                            className="text-xs text-red-500 hover:text-red-700 disabled:text-gray-400 disabled:cursor-not-allowed font-medium"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     {/* Error detail row */}
@@ -185,6 +222,36 @@ export default function VideosPage() {
           )}
         </>
       )}
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteTarget !== null} onClose={() => setDeleteTarget(null)}>
+        <div className="fixed inset-0 bg-black/40 z-50" />
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+          <DialogPanel className="bg-white rounded-xl p-6 max-w-sm w-full shadow-xl">
+            <DialogTitle className="text-base font-semibold text-gray-900">
+              Delete this video?
+            </DialogTitle>
+            <p className="mt-2 text-sm text-gray-600">
+              This will permanently remove the video, all detections, and all face records.
+              This cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteTarget && handleDelete(deleteTarget)}
+                disabled={deleteMutation.isPending}
+                className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </DialogPanel>
+        </div>
+      </Dialog>
     </div>
   );
 }
