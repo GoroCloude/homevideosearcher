@@ -44,7 +44,9 @@
   2. A cluster with no nickname shows no placeholder text — the card is identical to its pre-label state
   3. User clears an existing nickname (empty input) and the card reverts to unlabeled display
   4. Next Telegram digest caption reads `"{nickname}" seen N times` for labeled clusters; unlabeled clusters still read `"Unknown person" seen N times`
-**Plans**: TBD  
+**Plans**: 2 plans
+- [ ] 08-01-PLAN.md — Backend: PATCH /clusters/{id}/label + ClusterResponse.label + digest caption
+- [ ] 08-02-PLAN.md — Frontend: ClusterItem type + patchClusterLabel + useLabelCluster + ClusterCard inline edit
 **UI hint**: yes
 
 ---
@@ -83,7 +85,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Cluster Nickname Labeling | 0/? | Not started | — |
+| 8. Cluster Nickname Labeling | 0/2 | Not started | — |
 | 9. Person Appearance Page | 0/? | Not started | — |
 | 10. Watch-Folder Auto-Ingest | 0/? | Not started | — |
 
