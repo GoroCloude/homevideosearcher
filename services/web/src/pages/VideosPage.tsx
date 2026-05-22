@@ -65,6 +65,15 @@ export default function VideosPage() {
   const navigate = useNavigate();
   const deleteMutation = useDeleteVideo();
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
+
+  function toggleDay(key: string) {
+    setCollapsedDays(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
 
   // No-token banner
   if (!settings.apiToken) {
@@ -167,15 +176,21 @@ export default function VideosPage() {
                 {groupByDay(data.results).map(group => (
                   <React.Fragment key={group.key}>
                     {/* Day group header */}
-                    <tr className="bg-gray-50 border-t-2 border-gray-200">
+                    <tr
+                      className="bg-gray-50 border-t-2 border-gray-200 cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                      onClick={() => toggleDay(group.key)}
+                    >
                       <td colSpan={7} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        <span className="mr-2 text-gray-400">
+                          {collapsedDays.has(group.key) ? '▶' : '▼'}
+                        </span>
                         {group.label}
                         <span className="ml-2 font-normal normal-case text-gray-400">
                           {group.videos.length} video{group.videos.length !== 1 ? 's' : ''}
                         </span>
                       </td>
                     </tr>
-                    {group.videos.map(video => (
+                    {!collapsedDays.has(group.key) && group.videos.map(video => (
                       <React.Fragment key={video.id}>
                         <tr
                           className="hover:bg-gray-50 transition-colors cursor-pointer"
