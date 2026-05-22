@@ -66,6 +66,7 @@ async def send_digest() -> DigestResponse:
                 uc.appearance_count,
                 uc.first_seen::text,
                 uc.last_seen::text,
+                uc.label,
                 f.minio_key
             FROM unknown_clusters uc
             LEFT JOIN face_detections fd ON fd.id = uc.representative_face_id
@@ -106,11 +107,12 @@ async def send_digest() -> DigestResponse:
             )
             continue   # skip this cluster, include the rest
 
-        # Build caption: "Unknown person — seen Nx, YYYY-MM-DD → YYYY-MM-DD"
+        # Build caption: "{nickname} — seen Nx, YYYY-MM-DD → YYYY-MM-DD"
         count = cluster["appearance_count"]
         first = cluster["first_seen"][:10] if cluster["first_seen"] else "?"
         last  = cluster["last_seen"][:10]  if cluster["last_seen"]  else "?"
-        caption = f"Unknown person \u2014 seen {count}\u00d7, {first} \u2192 {last}"
+        name    = cluster["label"] or "Unknown person"
+        caption = f"{name} \u2014 seen {count}\u00d7, {first} \u2192 {last}"
 
         # IMPORTANT: seek(0) required — telegram-python-bot reads from current position
         buf = BytesIO(img_bytes)
