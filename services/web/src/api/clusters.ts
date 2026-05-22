@@ -36,6 +36,13 @@ export async function ignoreCluster(clusterId: string): Promise<void> {
   await authFetch(`/clusters/${clusterId}/ignore`, { method: 'POST' });
 }
 
+export async function patchClusterLabel(clusterId: string, label: string | null): Promise<void> {
+  await authFetch(`/clusters/${clusterId}/label`, {
+    method: 'PATCH',
+    body:   JSON.stringify({ label }),
+  });
+}
+
 export async function restoreCluster(clusterId: string): Promise<void> {
   await authFetch(`/clusters/${clusterId}/ignore`, { method: 'DELETE' });
 }
@@ -93,6 +100,17 @@ export function useRestoreCluster() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clusters'] });
       qc.invalidateQueries({ queryKey: ['clusters', 'ignored'] });
+    },
+  });
+}
+
+export function useLabelCluster() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ clusterId, label }: { clusterId: string; label: string | null }) =>
+      patchClusterLabel(clusterId, label),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clusters'] });
     },
   });
 }

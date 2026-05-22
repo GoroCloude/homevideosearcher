@@ -102,6 +102,7 @@ export interface ClusterItem {
   last_seen:               string | null;
   thumbnail_url:           string | null;  // "/frames/{id}/image"
   ignored:                 boolean;
+  label:                   string | null;
 }
 
 export interface UploadUrlResponse {
