@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { PersonResponse } from '../types/api';
 import { useDeletePerson, useRematchPerson } from '../api/persons';
 import EnrollmentDropzone from './EnrollmentDropzone';
@@ -33,8 +34,11 @@ export default function PersonCard({ person }: Props) {
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col gap-3">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2">
+      {/* Header — clicking name/avatar navigates to person appearance page */}
+      <Link
+        to={`/people/${person.id}`}
+        className="flex items-start justify-between gap-2 hover:opacity-80 transition-opacity"
+      >
         <div>
           <h3 className="font-semibold text-gray-900">{person.name}</h3>
           <p className="text-xs text-gray-500 mt-0.5">
@@ -45,7 +49,7 @@ export default function PersonCard({ person }: Props) {
           </p>
         </div>
         <div className="text-2xl select-none">👤</div>
-      </div>
+      </Link>
 
       {/* Actions */}
       <div className="flex gap-2 flex-wrap">

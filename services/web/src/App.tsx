@@ -6,6 +6,7 @@ import PeoplePage    from './pages/PeoplePage';
 import ClustersPage  from './pages/ClustersPage';
 import SettingsPage  from './pages/SettingsPage';
 import VideoDetailPage from './pages/VideoDetailPage';
+import PersonAppearancePage from './pages/PersonAppearancePage';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
           <Route index           element={<SearchPage />} />
           <Route path="videos"   element={<VideosPage />} />
           <Route path="people"   element={<PeoplePage />} />
+          <Route path="people/:id" element={<PersonAppearancePage />} />
           <Route path="clusters" element={<ClustersPage />} />
           <Route path="settings"   element={<SettingsPage />} />
           <Route path="videos/:id" element={<VideoDetailPage />} />

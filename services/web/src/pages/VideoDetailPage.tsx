@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import clsx from 'clsx';
@@ -39,6 +39,21 @@ export default function VideoDetailPage() {
   const { data: detections = [] } = useVideoDetections(id ?? '');
   const { data: faces = [] } = useVideoFaces(id ?? '');
   const deleteMutation = useDeleteVideo();
+
+  const [searchParams] = useSearchParams();
+  const seekToMs = searchParams.get('t');  // e.g. "12345" (ms) or null
+
+  // Seek to ?t= timestamp when present and video stream URL is ready.
+  // MUST be placed BEFORE the no-token guard early return — React Rules of Hooks
+  // forbids useEffect after a conditional return. seek() is a function declaration
+  // in this component and is hoisted within the function scope, so it is safely
+  // callable here even though its textual definition appears later in the source.
+  // `video` dep ensures stream_url is set on the <video> element before seeking.
+  useEffect(() => {
+    if (seekToMs && video && videoRef.current) {
+      seek(Number(seekToMs));
+    }
+  }, [seekToMs, video]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // No-token guard — app-standard amber banner (matches VideosPage pattern)
   if (!settings.apiToken) {
