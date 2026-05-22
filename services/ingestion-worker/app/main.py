@@ -100,7 +100,7 @@ async def ingest(
     # ── Defensive extension filter ────────────────────────────────────────
     # Guard against MinIO webhook firing for non-video uploads
     # (e.g., thumbnails, motion-detection images, config files).
-    _VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv"}
+    _VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".m4v"}
     _ext = Path(filename).suffix.lower()
     if _ext not in _VIDEO_EXTENSIONS:
         raise HTTPException(
