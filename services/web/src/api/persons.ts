@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authFetch, getSettings } from './client';
-import type { PersonResponse, EnrollResponse, RematchResponse } from '../types/api';
+import type { PersonResponse, EnrollResponse, RematchResponse, PersonAppearancesResponse } from '../types/api';
 
 // ── Raw API functions ──────────────────────────────────────────────────────────
 
@@ -80,5 +80,21 @@ export function useRematchPerson() {
   return useMutation({
     mutationFn: rematchPerson,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['persons'] }),
+  });
+}
+
+// ── Person Appearances ─────────────────────────────────────────────────────────
+
+export async function getPersonAppearances(personId: string): Promise<PersonAppearancesResponse> {
+  return authFetch(`/persons/${personId}/appearances`).then(r => r.json());
+}
+
+export function usePersonAppearances(personId: string) {
+  const { apiToken } = getSettings();
+  return useQuery({
+    queryKey:  ['person-appearances', personId],
+    queryFn:   () => getPersonAppearances(personId),
+    staleTime: 30_000,
+    enabled:   !!apiToken && !!personId,
   });
 }
