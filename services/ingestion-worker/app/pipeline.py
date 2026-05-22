@@ -9,6 +9,7 @@ CRITICAL DESIGN CONSTRAINTS (do not violate):
 4. Only frames WITH at least one detection (YOLO or face) are uploaded to MinIO.
 5. Embeddings stored as normed_embedding (face.normed_embedding, not face.embedding).
 """
+import asyncio
 import logging
 import shutil
 import tempfile
@@ -154,6 +155,12 @@ async def run_insightface(
 
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
+# ── Concurrency guard (OOM prevention on 8 GB host) ─────────────────────────
+# Only one YOLO + InsightFace run at a time. Additional ingest requests queue
+# here. Without this, two concurrent process_video calls = ~7 GB RSS → OOM kill.
+_pipeline_sem: asyncio.Semaphore = asyncio.Semaphore(1)
+
+
 async def process_video(
     video_id: str,
     minio_key: str,
@@ -164,122 +171,123 @@ async def process_video(
     Full pipeline for one video. Called as a FastAPI BackgroundTask.
     State machine: pending → processing → done | failed
     """
-    result = ProcessingResult(video_id=video_id)
-    work_dir = Path(tempfile.mkdtemp(prefix=f"hvs_{video_id}_"))
+    async with _pipeline_sem:
+        result = ProcessingResult(video_id=video_id)
+        work_dir = Path(tempfile.mkdtemp(prefix=f"hvs_{video_id}_"))
 
-    try:
-        await update_video_status(video_id, "processing")
-        logger.info("[%s] Starting pipeline for %s", video_id[:8], minio_key)
+        try:
+            await update_video_status(video_id, "processing")
+            logger.info("[%s] Starting pipeline for %s", video_id[:8], minio_key)
 
-        # ── Step 1: Download video from MinIO ────────────────────────────────
-        video_path = work_dir / minio_key.split("/")[-1]
-        download_video(minio_key, video_path)
+            # ── Step 1: Download video from MinIO ────────────────────────────────
+            video_path = work_dir / minio_key.split("/")[-1]
+            download_video(minio_key, video_path)
 
-        # ── Step 2: Probe metadata ────────────────────────────────────────────
-        meta = probe_video_metadata(video_path)
-        await update_video_metadata(
-            video_id,
-            meta.get("duration_sec"),
-            meta.get("width"),
-            meta.get("height"),
-            meta.get("fps"),
-        )
-
-        # ── Step 3: Extract frames ────────────────────────────────────────────
-        frames: list[ExtractedFrame] = extract_frames(video_path, work_dir)
-        result.frames_extracted = len(frames)
-        logger.info("[%s] Extracted %d frames", video_id[:8], len(frames))
-
-        if not frames:
-            logger.warning("[%s] No frames extracted — marking done (empty video?)", video_id[:8])
-            await update_video_status(video_id, "done")
-            return result
-
-        # ── Step 4: YOLO batch inference (all frames) ─────────────────────────
-        # YOLO runs first on ALL frames in batches of YOLO_BATCH_SIZE.
-        # Result: one list[Detection] per frame, in the same order as `frames`.
-        logger.info("[%s] Running YOLO on %d frames", video_id[:8], len(frames))
-        frame_paths = [f.path for f in frames]
-        all_yolo_results: list[list[Detection]] = []
-
-        for batch_start in range(0, len(frame_paths), config.YOLO_BATCH_SIZE):
-            batch = frame_paths[batch_start : batch_start + config.YOLO_BATCH_SIZE]
-            batch_results = run_yolo(batch, yolo_model)
-            all_yolo_results.extend(batch_results)
-            logger.debug(
-                "[%s] YOLO batch %d/%d: %d detections",
-                video_id[:8],
-                batch_start // config.YOLO_BATCH_SIZE + 1,
-                (len(frame_paths) + config.YOLO_BATCH_SIZE - 1) // config.YOLO_BATCH_SIZE,
-                sum(len(r) for r in batch_results),
+            # ── Step 2: Probe metadata ────────────────────────────────────────────
+            meta = probe_video_metadata(video_path)
+            await update_video_metadata(
+                video_id,
+                meta.get("duration_sec"),
+                meta.get("width"),
+                meta.get("height"),
+                meta.get("fps"),
             )
 
-        # ── Step 5: InsightFace per-frame (only on frames with person detections)
-        # InsightFace runs AFTER YOLO. Never parallel. Only on 'person' frames.
-        pool = await get_pool()
+            # ── Step 3: Extract frames ────────────────────────────────────────────
+            frames: list[ExtractedFrame] = extract_frames(video_path, work_dir)
+            result.frames_extracted = len(frames)
+            logger.info("[%s] Extracted %d frames", video_id[:8], len(frames))
 
-        for i, frame in enumerate(frames):
-            yolo_detections = all_yolo_results[i] if i < len(all_yolo_results) else []
-            has_person = any(d.class_name == "person" for d in yolo_detections)
+            if not frames:
+                logger.warning("[%s] No frames extracted — marking done (empty video?)", video_id[:8])
+                await update_video_status(video_id, "done")
+                return result
 
-            # Run InsightFace only on frames with at least one 'person' YOLO detection
-            face_detections: list[FaceDetection] = []
-            if has_person and face_app is not None:
-                face_detections = await run_insightface(frame.path, face_app, pool)
+            # ── Step 4: YOLO batch inference (all frames) ─────────────────────────
+            # YOLO runs first on ALL frames in batches of YOLO_BATCH_SIZE.
+            # Result: one list[Detection] per frame, in the same order as `frames`.
+            logger.info("[%s] Running YOLO on %d frames", video_id[:8], len(frames))
+            frame_paths = [f.path for f in frames]
+            all_yolo_results: list[list[Detection]] = []
 
-            # Selective frame storage: only upload frames that have any detection
-            has_any_detection = bool(yolo_detections) or bool(face_detections)
-            if not has_any_detection:
-                continue   # Skip frames with nothing detected — don't waste MinIO space
+            for batch_start in range(0, len(frame_paths), config.YOLO_BATCH_SIZE):
+                batch = frame_paths[batch_start : batch_start + config.YOLO_BATCH_SIZE]
+                batch_results = run_yolo(batch, yolo_model)
+                all_yolo_results.extend(batch_results)
+                logger.debug(
+                    "[%s] YOLO batch %d/%d: %d detections",
+                    video_id[:8],
+                    batch_start // config.YOLO_BATCH_SIZE + 1,
+                    (len(frame_paths) + config.YOLO_BATCH_SIZE - 1) // config.YOLO_BATCH_SIZE,
+                    sum(len(r) for r in batch_results),
+                )
 
-            # Upload frame to MinIO
-            try:
-                frame_minio_key = upload_frame(frame.path, video_id, frame.ts_ms)
-            except Exception as exc:
-                logger.error("[%s] Failed to upload frame ts=%d: %s", video_id[:8], frame.ts_ms, exc)
-                continue
+            # ── Step 5: InsightFace per-frame (only on frames with person detections)
+            # InsightFace runs AFTER YOLO. Never parallel. Only on 'person' frames.
+            pool = await get_pool()
 
-            # Write frame row to DB
-            frame_id = await insert_frame(video_id, frame.ts_ms, frame_minio_key)
-            result.frames_stored += 1
+            for i, frame in enumerate(frames):
+                yolo_detections = all_yolo_results[i] if i < len(all_yolo_results) else []
+                has_person = any(d.class_name == "person" for d in yolo_detections)
 
-            # Write YOLO detections
-            if yolo_detections:
-                await _write_detections(pool, frame_id, yolo_detections)
-                result.detections_written += len(yolo_detections)
+                # Run InsightFace only on frames with at least one 'person' YOLO detection
+                face_detections: list[FaceDetection] = []
+                if has_person and face_app is not None:
+                    face_detections = await run_insightface(frame.path, face_app, pool)
 
-            # Write InsightFace face detections
-            if face_detections:
-                await _write_face_detections(pool, frame_id, face_detections)
-                result.faces_written += len(face_detections)
-                # NOTE (FACE-05): YOLO detections and InsightFace face detections are written
-                # to separate tables (detections vs face_detections). A 'person' YOLO detection
-                # means "a person-shaped object exists" — back turned, far away, no face visible.
-                # A face_detection means "a face was detected and embedded". Both are stored
-                # independently. The face pipeline runs only when has_person=True, but may
-                # find 0 faces even when YOLO found a 'person' (face not visible to camera).
+                # Selective frame storage: only upload frames that have any detection
+                has_any_detection = bool(yolo_detections) or bool(face_detections)
+                if not has_any_detection:
+                    continue   # Skip frames with nothing detected — don't waste MinIO space
 
-        # ── Step 6: Finalize ──────────────────────────────────────────────────
-        await update_video_status(video_id, "done")
-        logger.info(
-            "[%s] Done. frames_extracted=%d stored=%d detections=%d faces=%d",
-            video_id[:8],
-            result.frames_extracted,
-            result.frames_stored,
-            result.detections_written,
-            result.faces_written,
-        )
-        return result
+                # Upload frame to MinIO
+                try:
+                    frame_minio_key = upload_frame(frame.path, video_id, frame.ts_ms)
+                except Exception as exc:
+                    logger.error("[%s] Failed to upload frame ts=%d: %s", video_id[:8], frame.ts_ms, exc)
+                    continue
 
-    except Exception as exc:
-        error_msg = f"{type(exc).__name__}: {exc}"
-        logger.exception("[%s] Pipeline failed: %s", video_id[:8], error_msg)
-        await update_video_status(video_id, "failed", error_message=error_msg)
-        raise
+                # Write frame row to DB
+                frame_id = await insert_frame(video_id, frame.ts_ms, frame_minio_key)
+                result.frames_stored += 1
 
-    finally:
-        # Always clean up the working directory
-        shutil.rmtree(work_dir, ignore_errors=True)
+                # Write YOLO detections
+                if yolo_detections:
+                    await _write_detections(pool, frame_id, yolo_detections)
+                    result.detections_written += len(yolo_detections)
+
+                # Write InsightFace face detections
+                if face_detections:
+                    await _write_face_detections(pool, frame_id, face_detections)
+                    result.faces_written += len(face_detections)
+                    # NOTE (FACE-05): YOLO detections and InsightFace face detections are written
+                    # to separate tables (detections vs face_detections). A 'person' YOLO detection
+                    # means "a person-shaped object exists" — back turned, far away, no face visible.
+                    # A face_detection means "a face was detected and embedded". Both are stored
+                    # independently. The face pipeline runs only when has_person=True, but may
+                    # find 0 faces even when YOLO found a 'person' (face not visible to camera).
+
+            # ── Step 6: Finalize ──────────────────────────────────────────────────
+            await update_video_status(video_id, "done")
+            logger.info(
+                "[%s] Done. frames_extracted=%d stored=%d detections=%d faces=%d",
+                video_id[:8],
+                result.frames_extracted,
+                result.frames_stored,
+                result.detections_written,
+                result.faces_written,
+            )
+            return result
+
+        except Exception as exc:
+            error_msg = f"{type(exc).__name__}: {exc}"
+            logger.exception("[%s] Pipeline failed: %s", video_id[:8], error_msg)
+            await update_video_status(video_id, "failed", error_message=error_msg)
+            raise
+
+        finally:
+            # Always clean up the working directory
+            shutil.rmtree(work_dir, ignore_errors=True)
 
 
 # ── DB write helpers ─────────────────────────────────────────────────────────
