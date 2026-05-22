@@ -26,7 +26,11 @@
 
 **Requirements covered:** DEL-03, DEL-05
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Read endpoints: GET /videos/{id}/detail, GET /videos/{id}/detections, GET /videos/{id}/faces
+- [ ] 06-02-PLAN.md — Hard delete: DELETE /videos/{id} with DB cascade + MinIO cleanup + auth verification
 
 **Done when:**
 - [ ] `GET /videos/{id}` returns filename, duration, status, ingestion date, and a stream URL
@@ -62,7 +66,7 @@
 
 | Phase | Plans | Status | Completed |
 |-------|-------|--------|-----------|
-| 6 — Video Detail & Delete API | TBD | ⏳ Pending | — |
+| 6 — Video Detail & Delete API | 2 | ⏳ Pending | — |
 | 7 — Video Detail Page + Delete UI | TBD | ⏳ Pending | — |
 
 ---
