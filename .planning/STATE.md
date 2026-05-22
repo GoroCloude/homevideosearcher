@@ -2,9 +2,9 @@
 
 ## Current Status
 
-**Phase:** Phase 6 — Video Detail & Delete API (plan 01 complete)  
-**Active plan:** 06-02  
-**Last action:** 06-01 complete — VideoDetail, DetectionItem, FaceItem models + 3 read endpoints added to videos.py
+**Phase:** Phase 6 — Video Detail & Delete API (plan 02 complete)  
+**Active plan:** 07-01  
+**Last action:** 06-02 complete — DELETE /videos/{id} with atomic DB cascade (face_detections → detections → frames → videos) + best-effort MinIO cleanup using remove_objects(DeleteObject); 204 No Content; auth via router-level require_token in main.py
 
 ## Project Reference
 
@@ -40,6 +40,9 @@ Phase 6 (first phase of v1.1). Run `/gsd-plan-phase 6` once ROADMAP.md is set.
 - appearance_count via SQL window function PARTITION BY COALESCE(matched_person_id, unknown_cluster_id) — no Python-side aggregation (Plan 06-01)
 - NULL cluster_id_prefix guarded with `or 'unknown'` — handles face detections with neither person nor cluster (Plan 06-01)
 - GET /videos/{id}/stream-url returns JSON (not 302) for JS timestamp-seek use case
+- MinIO cleanup placed after DB transaction commit — DB deletion is authoritative; MinIO errors logged but never raise (Plan 06-02)
+- Frame minio_keys fetched before DB delete inside the same connection — avoids re-query after transaction (Plan 06-02)
+- DeleteObject import inside delete_video function — avoids top-level import side-effect (Plan 06-02)
 - Tailwind v3 pinned (3.4.19) with CommonJS config — v4 breaking changes avoided
 - TanStack Query v5 object-form API throughout — no legacy positional args
 - Split pending/applied filter state prevents live-refetch on every keystroke (Plan 02)

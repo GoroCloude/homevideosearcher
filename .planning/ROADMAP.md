@@ -30,13 +30,13 @@
 
 Plans:
 - [x] 06-01-PLAN.md — Read endpoints: GET /videos/{id}/detail, GET /videos/{id}/detections, GET /videos/{id}/faces
-- [ ] 06-02-PLAN.md — Hard delete: DELETE /videos/{id} with DB cascade + MinIO cleanup + auth verification
+- [x] 06-02-PLAN.md — Hard delete: DELETE /videos/{id} with DB cascade + MinIO cleanup + auth verification
 
 **Done when:**
 - [x] `GET /videos/{id}` returns filename, duration, status, ingestion date, and a stream URL
 - [x] `GET /videos/{id}/detections` returns all YOLO detection records for the video with frame thumbnail URL, class label, confidence, and `ts_ms` timestamp
 - [x] `GET /videos/{id}/faces` returns all face detection records with person name (or "Unknown Cluster #N"), appearance count, and `ts_ms` timestamp
-- [ ] `DELETE /videos/{id}` removes the `videos` row, all associated `frames`, `detections`, and `face_detections` rows, the MinIO video file, and all MinIO frame thumbnail files — confirmed by DB count and MinIO list returning zero artifacts
+- [x] `DELETE /videos/{id}` removes the `videos` row, all associated `frames`, `detections`, and `face_detections` rows, the MinIO video file, and all MinIO frame thumbnail files — confirmed by DB count and MinIO list returning zero artifacts
 - [ ] `DELETE /videos/{id}` without a valid bearer token returns HTTP 401
 
 **UI hint**: no
@@ -66,7 +66,7 @@ Plans:
 
 | Phase | Plans | Status | Completed |
 |-------|-------|--------|-----------|
-| 6 — Video Detail & Delete API | 2 | 🔄 In Progress | 1/2 plans |
+| 6 — Video Detail & Delete API | 2 | 🔄 Checkpoint | 2/2 plans (human verify pending) |
 | 7 — Video Detail Page + Delete UI | TBD | ⏳ Pending | — |
 
 ---
