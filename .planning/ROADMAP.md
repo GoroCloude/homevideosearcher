@@ -79,7 +79,11 @@
   4. Two video files arriving at nearly the same time are processed sequentially, not concurrently; the host never OOM-kills the ingestion worker
   5. Setting `WATCH_USE_POLLING=true` in the environment enables polling-based watching, and the same ingest behavior is observed on NFS/CIFS mounts where inotify is unavailable
   6. Each file transition (`DETECTED`, `STABLE`, `UPLOADING`, `QUEUED`, `SKIPPED`, `ERROR`) appears as a structured log line in `docker-compose logs watcher`
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 10-01-PLAN.md — Semaphore gate: asyncio.Semaphore(1) in ingestion-worker pipeline.py (AUTO-05)
+- [ ] 10-02-PLAN.md — Watcher service: services/watcher/ scaffold + daemon (AUTO-01, AUTO-02, AUTO-03, AUTO-04, AUTO-06, AUTO-07)
+- [ ] 10-03-PLAN.md — Docker Compose integration: watcher service block + end-to-end verify (AUTO-01)
 
 ---
 
@@ -89,7 +93,7 @@
 |-------|----------------|--------|-----------|
 | 8. Cluster Nickname Labeling | 0/2 | Not started | — |
 | 9. Person Appearance Page | 0/? | Not started | — |
-| 10. Watch-Folder Auto-Ingest | 0/? | Not started | — |
+| 10. Watch-Folder Auto-Ingest | 0/3 | Not started | — |
 
 ---
 
