@@ -246,9 +246,12 @@ async def list_video_detections(video_id: UUID) -> List[DetectionItem]:
                 d.frame_id::text   AS frame_id,
                 f.ts_ms,
                 f.minio_key        AS frame_minio_key,
-                d.label,
+                d.class_name       AS label,
                 d.confidence,
-                d.bbox_json
+                json_build_object(
+                    'x1', d.bbox_x1, 'y1', d.bbox_y1,
+                    'x2', d.bbox_x2, 'y2', d.bbox_y2
+                )::text            AS bbox_json
             FROM detections d
             JOIN frames f ON f.id = d.frame_id
             WHERE f.video_id = $1
@@ -310,7 +313,7 @@ async def list_video_faces(video_id: UUID) -> List[FaceItem]:
                 f.ts_ms,
                 f.minio_key              AS frame_minio_key,
                 p.name                   AS person_name,
-                uc.label_name            AS cluster_label,
+                uc.label             AS cluster_label,
                 LEFT(uc.id::text, 8)     AS cluster_id_prefix,
                 COUNT(fd.id) OVER (
                     PARTITION BY COALESCE(
@@ -320,7 +323,7 @@ async def list_video_faces(video_id: UUID) -> List[FaceItem]:
                 )                        AS appearance_count
             FROM face_detections fd
             JOIN frames f ON f.id = fd.frame_id
-            LEFT JOIN persons p ON p.id = fd.matched_person_id
+            LEFT JOIN known_persons p ON p.id = fd.matched_person_id
             LEFT JOIN unknown_clusters uc ON uc.id = fd.unknown_cluster_id
             WHERE f.video_id = $1
             ORDER BY f.ts_ms, fd.id
