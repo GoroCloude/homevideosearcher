@@ -1,28 +1,30 @@
 # HomeVideoSearcher
 
-## Current Milestone: v1.1 Video Detail & Delete
+## Current State (v1.1 — Shipped 2026-05-22)
 
-**Goal:** Drill into any video to see all its detections and faces, and remove unwanted videos cleanly from the system.
-
-**Target features:**
-- Video Detail Page (`/videos/:id`) with Detections tab (YOLO thumbnails) and Faces tab (face grid + timeline)
-- Hard delete — removes video from DB, MinIO, and all associated frames/detections/embeddings
-
----
-
-## Current State (v1.0 — Shipped 2026-05-21)
-
-**v1.0 MVP is live.** All 5 phases complete. Deployed on Ubuntu homeserver (i5-6200, 8 GB RAM, CPU-only), exposed via Cloudflare Tunnel at `homevideosearcher.shumov.eu`.
+**v1.1 is live.** All 7 phases complete across v1.0 + v1.1. Deployed on Ubuntu homeserver (i5-6200, 8 GB RAM, CPU-only), exposed via Cloudflare Tunnel at `homevideosearcher.shumov.eu`.
 
 **What's running:**
 - Video ingestion pipeline (FFmpeg + YOLO + InsightFace, all CPU-only)
 - Face enrollment and pgvector similarity search
-- HDBSCAN nightly clustering of unknown faces (5 clusters confirmed live)
+- HDBSCAN nightly clustering of unknown faces
 - Telegram digest via `@gorohomealert_bot` — sends cluster photo albums
-- React web UI: search, people, clusters, video upload
+- React web UI: search, people, clusters, video upload, **video detail page with detection/face tabs + timeline**
+- **Per-video hard delete** (DB cascade + MinIO cleanup)
 - n8n 8am daily cron: cluster/run → digest/send
 
 **Next milestone:** Not yet defined. Run `/gsd-new-milestone` to plan v2.0.
+
+---
+
+<details>
+<summary>Current Milestone: v1.1 Video Detail & Delete (archived)</summary>
+
+**Goal:** Drill into any video to see all its detections and faces, and remove unwanted videos cleanly from the system.
+
+**Shipped:** 2026-05-22 | **Full archive:** [.planning/milestones/v1.1-ROADMAP.md](.planning/milestones/v1.1-ROADMAP.md)
+
+</details>
 
 ---
 
@@ -100,4 +102,4 @@ Automatically surface unknown faces from home camera footage and notify via Tele
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-21 — v1.0 shipped*
+*Last updated: 2026-05-22 — v1.1 shipped*

@@ -13,62 +13,11 @@
 
 ---
 
-## v1.1 Video Detail & Delete
+## ✅ v1.1 Video Detail & Delete — SHIPPED 2026-05-22
 
-**Target:** Drill into any video to see all detections and faces; hard-delete unwanted videos.
-**Milestone:** v1.1
-
----
-
-### Phase 6: Video Detail & Delete API
-
-**Goal:** Expose API endpoints that deliver per-video metadata, detections, and faces, plus a hard-delete endpoint with full DB + MinIO cascade cleanup protected by bearer-token auth.
-
-**Requirements covered:** DEL-03, DEL-05
-
-**Plans:** 2 plans
-
-Plans:
-- [x] 06-01-PLAN.md — Read endpoints: GET /videos/{id}/detail, GET /videos/{id}/detections, GET /videos/{id}/faces
-- [x] 06-02-PLAN.md — Hard delete: DELETE /videos/{id} with DB cascade + MinIO cleanup + auth verification
-
-**Done when:**
-- [x] `GET /videos/{id}` returns filename, duration, status, ingestion date, and a stream URL
-- [x] `GET /videos/{id}/detections` returns all YOLO detection records for the video with frame thumbnail URL, class label, confidence, and `ts_ms` timestamp
-- [x] `GET /videos/{id}/faces` returns all face detection records with person name (or "Unknown Cluster #N"), appearance count, and `ts_ms` timestamp
-- [x] `DELETE /videos/{id}` removes the `videos` row, all associated `frames`, `detections`, and `face_detections` rows, the MinIO video file, and all MinIO frame thumbnail files — confirmed by DB count and MinIO list returning zero artifacts
-- [ ] `DELETE /videos/{id}` without a valid bearer token returns HTTP 401
-
-**UI hint**: no
-
----
-
-### Phase 7: Video Detail Page + Delete UI
-
-**Goal:** Users can open any video's detail page to browse detections and faces with a timeline, watch the video, and permanently delete it from either the Videos grid or the detail page.
-
-**Requirements covered:** VDP-01, VDP-02, VDP-03, VDP-04, VDP-05, VDP-06, DEL-01, DEL-02, DEL-04
-
-**Plans:** TBD
-
-**Done when:**
-- [ ] Clicking a detection count, face count cell, or the row itself on the Videos page navigates to `/videos/:id`; a dedicated row icon also links to the detail page
-- [x] Clicking a detection count, face count cell, or the row itself on the Videos page navigates to `/videos/:id`; a dedicated row icon also links to the detail page
-- [x] The detail page displays video metadata (filename, duration, status, ingestion date) and a Play button that opens the video stream in-page
-- [x] The "Detections" tab renders a responsive grid of frame thumbnails; each card shows class label, confidence, and timestamp
-- [x] The "Faces" tab renders a grid of face thumbnails each showing person name or "Unknown Cluster #N" and timestamp, plus a timeline bar where clicking any mark seeks the video player to that timestamp
-- [x] A Delete button on the Videos page row (confirmation dialog) and a Delete button on the detail page (confirmation dialog → navigate back to Videos) both remove the video; it disappears from the Videos grid, Search results, and cluster membership immediately with no stale data visible
-
-**UI hint**: yes
-
----
-
-## Progress
-
-| Phase | Plans | Status | Completed |
-|-------|-------|--------|-----------|
-| 6 — Video Detail & Delete API | 2 | ✅ Complete | 2026-05-22 |
-| 7 — Video Detail Page + Delete UI | 3 | ✅ Complete | 2026-05-22 |
+> Drill into any video: Detections tab (YOLO thumbnails), Faces tab (face grid + timeline seek), in-page video player, hard delete with full DB + MinIO cascade. 2 phases, 5 plans, 20 commits.
+>
+> **Full archive:** [.planning/milestones/v1.1-ROADMAP.md](.planning/milestones/v1.1-ROADMAP.md)
 
 ---
 
