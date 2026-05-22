@@ -2,9 +2,9 @@
 
 ## Current Status
 
-**Phase:** Phase 8 complete — moving to Phase 9  
+**Phase:** Phase 9 complete — moving to Phase 10  
 **Active plan:** —  
-**Last action:** Phase 8 executed 2026-05-22 — Cluster Nickname Labeling (2 waves, 19 tests)
+**Last action:** Phase 9 executed 2026-05-22 — Person Appearance Page (2 waves, 36 tests)
 
 ## Project Reference
 
@@ -15,7 +15,7 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 
 ## Next Step
 
-Run `/gsd-plan-phase 9` to plan the Person Appearance Page.
+Run `/gsd-plan-phase 10` to plan the Watch-Folder Auto-Ingest feature.
 
 ## Phase Snapshot
 
@@ -29,7 +29,7 @@ Run `/gsd-plan-phase 9` to plan the Person Appearance Page.
 | 6 — Video Detail & Delete API | New GET+DELETE video endpoints; hard-delete cascade; bearer auth | ✅ Complete |
 | 7 — Video Detail Page + Delete UI | VideoDetailPage route, tabs, timeline, delete dialogs | ✅ Complete |
 | 8 — Cluster Nickname Labeling | Inline label on cluster cards; persists to DB; surfaces in digest | ✅ Complete |
-| 9 — Person Appearance Page | Click a person → all videos they appear in with timestamps/thumbnails | 🔲 Not started |
+| 9 — Person Appearance Page | Click a person → all videos they appear in with timestamps/thumbnails | ✅ Complete |
 | 10 — Watch-Folder Auto-Ingest | Daemon watches folder; new video files auto-uploaded and ingested | 🔲 Not started |
 
 ## Decisions
