@@ -213,6 +213,67 @@ async def get_video_detail(video_id: UUID) -> VideoDetail:
     )
 
 
+class DetectionItem(BaseModel):
+    id:            str
+    frame_id:      str
+    ts_ms:         int           # millisecond offset within video
+    thumbnail_url: str           # presigned GET URL for frame thumbnail (MINIO_BUCKET_FRAMES)
+    label:         str           # YOLO class label, e.g. "person", "car"
+    confidence:    float
+    bbox_json:     str           # JSON string of bounding box coords
+
+
+@router.get("/{video_id}/detections", response_model=List[DetectionItem])
+async def list_video_detections(video_id: UUID) -> List[DetectionItem]:
+    """
+    Returns all YOLO detection records for the video ordered by timestamp.
+    Each item includes a presigned frame thumbnail URL (1h TTL).
+    Auth: inherited from videos_router registration in main.py.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Verify video exists first
+        exists = await conn.fetchval(
+            "SELECT 1 FROM videos WHERE id = $1", video_id
+        )
+        if not exists:
+            raise HTTPException(status_code=404, detail="Video not found")
+
+        rows = await conn.fetch(
+            """
+            SELECT
+                d.id::text         AS id,
+                d.frame_id::text   AS frame_id,
+                f.ts_ms,
+                f.minio_key        AS frame_minio_key,
+                d.label,
+                d.confidence,
+                d.bbox_json
+            FROM detections d
+            JOIN frames f ON f.id = d.frame_id
+            WHERE f.video_id = $1
+            ORDER BY f.ts_ms, d.id
+            """,
+            video_id,
+        )
+    return [
+        DetectionItem(
+            id=r["id"],
+            frame_id=r["frame_id"],
+            ts_ms=r["ts_ms"],
+            thumbnail_url=generate_presigned_url(
+                bucket=config.MINIO_BUCKET_FRAMES,
+                key=r["frame_minio_key"],
+                expires_hours=1,
+            ),
+            label=r["label"],
+            confidence=r["confidence"],
+            bbox_json=r["bbox_json"],
+        )
+        for r in rows
+    ]
+
+
 @router.get("/{video_id}/stream")
 async def stream_video(video_id: UUID) -> RedirectResponse:
     """
