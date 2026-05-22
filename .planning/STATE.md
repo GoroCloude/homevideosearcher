@@ -17,7 +17,9 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 
 Run `/gsd-plan-phase 8` to plan the first phase of v2.0.
 
-## Phase SnapshotPhase | Goal | Status |
+## Phase Snapshot
+
+| Phase | Goal | Status |
 |-------|------|--------|
 | 1 — Foundation | Docker Compose stack ingests video, runs YOLO + InsightFace, writes to DB | ✅ Complete |
 | 2 — Enrollment, Search & Automation | Enroll persons, search footage, n8n auto-trigger | ✅ Complete |
@@ -26,6 +28,9 @@ Run `/gsd-plan-phase 8` to plan the first phase of v2.0.
 | 5 — Video Upload UI | Upload videos from browser → MinIO → auto-ingest | ✅ Complete |
 | 6 — Video Detail & Delete API | New GET+DELETE video endpoints; hard-delete cascade; bearer auth | ✅ Complete |
 | 7 — Video Detail Page + Delete UI | VideoDetailPage route, tabs, timeline, delete dialogs | ✅ Complete |
+| 8 — Cluster Nickname Labeling | Inline label on cluster cards; persists to DB; surfaces in digest | 🔲 Not started |
+| 9 — Person Appearance Page | Click a person → all videos they appear in with timestamps/thumbnails | 🔲 Not started |
+| 10 — Watch-Folder Auto-Ingest | Daemon watches folder; new video files auto-uploaded and ingested | 🔲 Not started |
 
 ## Decisions
 

@@ -65,23 +65,21 @@
 
 ## Traceability
 
-*Filled by roadmapper.*
-
 | Requirement | Phase | Plans |
 |-------------|-------|-------|
-| CLU-01 | — | — |
-| CLU-02 | — | — |
-| CLU-03 | — | — |
-| CLU-04 | — | — |
-| PAP-01 | — | — |
-| PAP-02 | — | — |
-| PAP-03 | — | — |
-| PAP-04 | — | — |
-| PAP-05 | — | — |
-| AUTO-01 | — | — |
-| AUTO-02 | — | — |
-| AUTO-03 | — | — |
-| AUTO-04 | — | — |
-| AUTO-05 | — | — |
-| AUTO-06 | — | — |
-| AUTO-07 | — | — |
+| CLU-01 | Phase 8 | TBD |
+| CLU-02 | Phase 8 | TBD |
+| CLU-03 | Phase 8 | TBD |
+| CLU-04 | Phase 8 | TBD |
+| PAP-01 | Phase 9 | TBD |
+| PAP-02 | Phase 9 | TBD |
+| PAP-03 | Phase 9 | TBD |
+| PAP-04 | Phase 9 | TBD |
+| PAP-05 | Phase 9 | TBD |
+| AUTO-01 | Phase 10 | TBD |
+| AUTO-02 | Phase 10 | TBD |
+| AUTO-03 | Phase 10 | TBD |
+| AUTO-04 | Phase 10 | TBD |
+| AUTO-05 | Phase 10 | TBD |
+| AUTO-06 | Phase 10 | TBD |
+| AUTO-07 | Phase 10 | TBD |
