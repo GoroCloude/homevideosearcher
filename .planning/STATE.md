@@ -2,16 +2,16 @@
 
 ## Current Status
 
-**Phase:** 3 — Intelligence & Telegram Digest ✅ COMPLETE  
+**Phase:** Not started (defining requirements for v1.1)  
 **Active plan:** —  
-**Last action:** Phase 3 complete — HDBSCAN clustering engine, cluster management endpoints (ignore/restore/promote), Telegram sendMediaGroup digest, React UI promote/noise/restore wired, n8n 8am cron workflow.
+**Last action:** Milestone v1.1 started — Video Detail & Delete
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-16)
+See: .planning/PROJECT.md (updated 2026-05-21)
 
 **Core value:** Automatically surface unknown faces from home camera footage and notify via daily Telegram digest  
-**Current focus:** Phase 3 — Intelligence & Telegram Digest (complete)
+**Current focus:** v1.1 — Video Detail Page + Hard Delete
 
 - Phase 3 cluster management: POST /clusters/{id}/ignore sets ignored=true (reversible via DELETE); POST /clusters/{id}/promote bulk-updates face_detections.matched_person_id for all cluster members (no full-library rematch)
 - Phase 3 Telegram digest: MinIO bytes fetched internally (not presigned URLs — Telegram servers can't reach Docker network); BytesIO.seek(0) required before InputMediaPhoto
@@ -19,7 +19,7 @@ See: .planning/PROJECT.md (updated 2026-05-16)
 
 ## Next Step
 
-v1.0 milestone archived and tagged. Run `/gsd-new-milestone` to start planning v2.0.
+Phase 6 (first phase of v1.1). Run `/gsd-plan-phase 6` once ROADMAP.md is set.
 
 ## Phase Snapshot
 

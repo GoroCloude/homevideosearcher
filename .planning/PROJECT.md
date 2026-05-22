@@ -1,5 +1,15 @@
 # HomeVideoSearcher
 
+## Current Milestone: v1.1 Video Detail & Delete
+
+**Goal:** Drill into any video to see all its detections and faces, and remove unwanted videos cleanly from the system.
+
+**Target features:**
+- Video Detail Page (`/videos/:id`) with Detections tab (YOLO thumbnails) and Faces tab (face grid + timeline)
+- Hard delete — removes video from DB, MinIO, and all associated frames/detections/embeddings
+
+---
+
 ## Current State (v1.0 — Shipped 2026-05-21)
 
 **v1.0 MVP is live.** All 5 phases complete. Deployed on Ubuntu homeserver (i5-6200, 8 GB RAM, CPU-only), exposed via Cloudflare Tunnel at `homevideosearcher.shumov.eu`.

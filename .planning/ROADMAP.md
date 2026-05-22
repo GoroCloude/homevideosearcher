@@ -1,6 +1,6 @@
 # Roadmap: HomeVideoSearcher
 
-**Current milestone:** v2.0 (TBD)  
+**Current milestone:** v1.1 Video Detail & Delete  
 **Last shipped:** [v1.0 MVP](.planning/milestones/v1.0-ROADMAP.md) — 5 phases, 14 plans, 99 commits — 2026-05-21
 
 ---
@@ -15,7 +15,7 @@
 
 ## v2.0 — TBD
 
-> Next milestone not yet planned. Run `/gsd-new-milestone` to define goals and requirements.
+> Next major milestone not yet planned. Run `/gsd-new-milestone` to define goals and requirements.
 
 ---
 
