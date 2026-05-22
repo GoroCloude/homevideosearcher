@@ -2,9 +2,9 @@
 
 ## Current Status
 
-**Phase:** Phase 6 ready to plan (v1.1 roadmap defined)  
-**Active plan:** —  
-**Last action:** v1.1 roadmap created — Phase 6 (API) + Phase 7 (UI)
+**Phase:** Phase 6 — Video Detail & Delete API (plan 01 complete)  
+**Active plan:** 06-02  
+**Last action:** 06-01 complete — VideoDetail, DetectionItem, FaceItem models + 3 read endpoints added to videos.py
 
 ## Project Reference
 
@@ -36,7 +36,9 @@ Phase 6 (first phase of v1.1). Run `/gsd-plan-phase 6` once ROADMAP.md is set.
 ## Decisions
 
 - frames_router registered without Depends(require_token) — presigned MinIO URLs are self-secured via HMAC+TTL
-- Separate _public_client singleton for MINIO_PUBLIC_ENDPOINT ensures browser-resolvable presigned URLs
+- Route GET /{video_id} placed before /{video_id}/stream — FastAPI resolves specific paths first (Plan 06-01)
+- appearance_count via SQL window function PARTITION BY COALESCE(matched_person_id, unknown_cluster_id) — no Python-side aggregation (Plan 06-01)
+- NULL cluster_id_prefix guarded with `or 'unknown'` — handles face detections with neither person nor cluster (Plan 06-01)
 - GET /videos/{id}/stream-url returns JSON (not 302) for JS timestamp-seek use case
 - Tailwind v3 pinned (3.4.19) with CommonJS config — v4 breaking changes avoided
 - TanStack Query v5 object-form API throughout — no legacy positional args
