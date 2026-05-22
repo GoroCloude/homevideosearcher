@@ -144,6 +144,75 @@ async def stream_video_url(video_id: UUID) -> StreamUrlResponse:
     return StreamUrlResponse(url=url)
 
 
+class VideoDetail(BaseModel):
+    id:              str
+    filename:        str           # basename of minio_key, e.g. "family_bbq.mp4"
+    minio_key:       str           # full MinIO key, e.g. "videos/family_bbq.mp4"
+    status:          str
+    error_message:   Optional[str] = None
+    recorded_at:     Optional[str] = None
+    duration_sec:    Optional[float] = None
+    ingested_at:     str
+    frame_count:     int
+    detection_count: int
+    face_count:      int
+    stream_url:      str           # presigned GET URL — 1h TTL, generated on-demand
+
+
+@router.get("/{video_id}", response_model=VideoDetail)
+async def get_video_detail(video_id: UUID) -> VideoDetail:
+    """
+    Returns full video metadata plus a presigned stream URL.
+    Auth: inherited from videos_router registration in main.py.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT
+                v.id::text,
+                v.minio_key,
+                v.status,
+                v.error_message,
+                v.recorded_at::text,
+                v.duration_sec,
+                v.ingested_at::text,
+                COUNT(DISTINCT f.id)   AS frame_count,
+                COUNT(DISTINCT d.id)   AS detection_count,
+                COUNT(DISTINCT fd.id)  AS face_count
+            FROM videos v
+            LEFT JOIN frames          f  ON f.video_id = v.id
+            LEFT JOIN detections      d  ON d.frame_id = f.id
+            LEFT JOIN face_detections fd ON fd.frame_id = f.id
+            WHERE v.id = $1
+            GROUP BY v.id, v.minio_key, v.status, v.error_message,
+                     v.recorded_at, v.duration_sec, v.ingested_at
+            """,
+            video_id,
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="Video not found")
+    stream_url = generate_presigned_url(
+        bucket=config.MINIO_BUCKET_VIDEOS,
+        key=row["minio_key"],
+        expires_hours=1,
+    )
+    return VideoDetail(
+        id=row["id"],
+        filename=row["minio_key"].split("/")[-1],
+        minio_key=row["minio_key"],
+        status=row["status"],
+        error_message=row["error_message"],
+        recorded_at=row["recorded_at"],
+        duration_sec=row["duration_sec"],
+        ingested_at=row["ingested_at"],
+        frame_count=row["frame_count"],
+        detection_count=row["detection_count"],
+        face_count=row["face_count"],
+        stream_url=stream_url,
+    )
+
+
 @router.get("/{video_id}/stream")
 async def stream_video(video_id: UUID) -> RedirectResponse:
     """
