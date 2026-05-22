@@ -2,9 +2,9 @@
 
 ## Current Status
 
-**Phase:** Not started (defining requirements for v1.1)  
+**Phase:** Phase 6 ready to plan (v1.1 roadmap defined)  
 **Active plan:** —  
-**Last action:** Milestone v1.1 started — Video Detail & Delete
+**Last action:** v1.1 roadmap created — Phase 6 (API) + Phase 7 (UI)
 
 ## Project Reference
 
@@ -30,6 +30,8 @@ Phase 6 (first phase of v1.1). Run `/gsd-plan-phase 6` once ROADMAP.md is set.
 | 3 — Intelligence & Telegram Digest | HDBSCAN clustering, stable cluster UUIDs, Telegram album digest | ✅ Complete |
 | 4 — Web UI | React UI for search, persons, clusters, settings | ✅ Complete |
 | 5 — Video Upload UI | Upload videos from browser → MinIO → auto-ingest | ✅ Complete |
+| 6 — Video Detail & Delete API | New GET+DELETE video endpoints; hard-delete cascade; bearer auth | ⏳ Pending |
+| 7 — Video Detail Page + Delete UI | VideoDetailPage route, tabs, timeline, delete dialogs | ⏳ Pending |
 
 ## Decisions
 

@@ -56,13 +56,22 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VDP-01 – VDP-06 | TBD | Pending |
-| DEL-01 – DEL-05 | TBD | Pending |
+| DEL-03 | Phase 6 — Video Detail & Delete API | Pending |
+| DEL-05 | Phase 6 — Video Detail & Delete API | Pending |
+| VDP-01 | Phase 7 — Video Detail Page + Delete UI | Pending |
+| VDP-02 | Phase 7 — Video Detail Page + Delete UI | Pending |
+| VDP-03 | Phase 7 — Video Detail Page + Delete UI | Pending |
+| VDP-04 | Phase 7 — Video Detail Page + Delete UI | Pending |
+| VDP-05 | Phase 7 — Video Detail Page + Delete UI | Pending |
+| VDP-06 | Phase 7 — Video Detail Page + Delete UI | Pending |
+| DEL-01 | Phase 7 — Video Detail Page + Delete UI | Pending |
+| DEL-02 | Phase 7 — Video Detail Page + Delete UI | Pending |
+| DEL-04 | Phase 7 — Video Detail Page + Delete UI | Pending |
 
 **Coverage:**
 - v1.1 requirements: 11 total
-- Mapped to phases: TBD (roadmapper fills this)
-- Unmapped: TBD
+- Mapped to phases: 11/11 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-21*
