@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from . import config
 from .db import get_pool
 from .faces_api import analyze_image_bytes
+from .storage import generate_presigned_url
 
 logger = logging.getLogger(__name__)
 
@@ -451,4 +452,110 @@ async def list_person_faces(
             "total":     int(total),
             "has_next":  (page * page_size) < int(total),
         },
+    )
+
+
+# ── GET /persons/{person_id}/appearances ──────────────────────────────────────
+
+class VideoAppearanceItem(BaseModel):
+    video_id:         str
+    video_minio_key:  str
+    recorded_at:      Optional[str]    # ISO datetime string or None when not set
+    duration_sec:     Optional[float]
+    first_ts_ms:      int              # lowest ts_ms for this person in this video
+    appearance_count: int              # total face_detections rows for this person in this video
+    thumbnail_url:    str              # presigned GET URL for the earliest-frame face crop
+
+
+class PersonAppearancesResponse(BaseModel):
+    person_id:   str
+    person_name: str
+    results:     list[VideoAppearanceItem]
+
+
+@router.get("/{person_id}/appearances", response_model=PersonAppearancesResponse)
+async def list_person_appearances(
+    person_id: UUID,
+) -> PersonAppearancesResponse:
+    """
+    Return one row per video in which this person appears, sorted newest-first.
+
+    Uses a CTE (DISTINCT ON video_id ORDER BY ts_ms ASC) to pick the earliest
+    frame minio_key per video for the face thumbnail. Presigned URLs are generated
+    server-side to prevent N+1 browser requests against the MinIO connection pool.
+
+    Returns 404 if person_id is not in known_persons.
+    Returns empty results list if person exists but has no matched face_detections.
+    """
+    pool = await get_pool()
+
+    # Verify person exists; fetch name for response header
+    async with pool.acquire() as conn:
+        person_row = await conn.fetchrow(
+            "SELECT id, name FROM known_persons WHERE id = $1",
+            person_id,
+        )
+    if not person_row:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            WITH first_frames AS (
+                -- Pick the one frame per video with the lowest ts_ms for this person.
+                -- DISTINCT ON + ORDER BY ts_ms ASC picks the earliest frame as thumbnail.
+                SELECT DISTINCT ON (f.video_id)
+                    f.video_id,
+                    f.minio_key AS frame_minio_key
+                FROM face_detections fd
+                JOIN frames f ON f.id = fd.frame_id
+                WHERE fd.matched_person_id = $1
+                ORDER BY f.video_id, f.ts_ms ASC
+            )
+            SELECT
+                f.video_id::text                               AS video_id,
+                MIN(f.ts_ms)::int                              AS first_ts_ms,
+                COUNT(*)::int                                  AS appearance_count,
+                v.minio_key                                    AS video_minio_key,
+                COALESCE(v.recorded_at, v.ingested_at)::text  AS recorded_at,
+                v.duration_sec,
+                ff.frame_minio_key
+            FROM face_detections fd
+            JOIN frames f         ON f.id       = fd.frame_id
+            JOIN videos v         ON v.id       = f.video_id
+            JOIN first_frames ff  ON ff.video_id = f.video_id
+            WHERE fd.matched_person_id = $1
+            GROUP BY
+                f.video_id,
+                v.minio_key,
+                v.recorded_at,
+                v.ingested_at,
+                v.duration_sec,
+                ff.frame_minio_key
+            ORDER BY COALESCE(v.recorded_at, v.ingested_at) DESC NULLS LAST
+            """,
+            person_id,
+        )
+
+    results = [
+        VideoAppearanceItem(
+            video_id=r["video_id"],
+            video_minio_key=r["video_minio_key"],
+            recorded_at=r["recorded_at"],
+            duration_sec=float(r["duration_sec"]) if r["duration_sec"] is not None else None,
+            first_ts_ms=r["first_ts_ms"],
+            appearance_count=r["appearance_count"],
+            thumbnail_url=generate_presigned_url(
+                bucket=config.MINIO_BUCKET_FRAMES,
+                key=r["frame_minio_key"],
+                expires_hours=1,
+            ),
+        )
+        for r in rows
+    ]
+
+    return PersonAppearancesResponse(
+        person_id=str(person_id),
+        person_name=person_row["name"],
+        results=results,
     )
