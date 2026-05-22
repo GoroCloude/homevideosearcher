@@ -8,6 +8,7 @@ import { addToast } from '../hooks/useToast';
 import { useSettings } from '../context/SettingsContext';
 import StatusBadge from '../components/StatusBadge';
 import VideoUploadButton from '../components/VideoUploadButton';
+import type { VideoListItem } from '../types/api';
 
 function shortKey(minioKey: string): string {
   return minioKey.split('/').pop() ?? minioKey;
