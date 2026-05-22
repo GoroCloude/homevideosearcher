@@ -47,6 +47,31 @@ services:
     networks:
       - home-infra
 
+  watcher:
+    build: ./services/watcher
+    environment:
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET_VIDEOS: ${MINIO_BUCKET_VIDEOS:-videos}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      WATCH_DIR: /watch
+      WORKER_URL: http://ingestion-worker:8001
+      WATCH_USE_POLLING: ${WATCH_USE_POLLING:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ${WATCH_FOLDER:-/data/videos}:/watch:ro
+    depends_on:
+      ingestion-worker:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    restart: unless-stopped
+    networks:
+      - home-infra
+
   api:
     build: ./services/api
     environment:
