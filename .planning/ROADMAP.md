@@ -61,7 +61,9 @@
   3. Clicking a video row on the person page opens the video detail page seeked to the correct timestamp
   4. Visiting `/people/:id` for a non-existent person ID shows a 404 state; visiting for a person with no matched detections shows an empty state
   5. Pasting or bookmarking a URL like `/videos/:id?t=12345` opens the video detail page with the player seeked to that timestamp on mount
-**Plans**: TBD  
+**Plans**: 2 plans
+- [ ] 09-01-PLAN.md — Backend: GET /persons/{id}/appearances endpoint + TypeScript VideoAppearance types
+- [ ] 09-02-PLAN.md — Frontend: usePersonAppearances hook + PersonAppearancePage + route + PersonCard nav + VideoDetailPage ?t= seek
 **UI hint**: yes
 
 ---
