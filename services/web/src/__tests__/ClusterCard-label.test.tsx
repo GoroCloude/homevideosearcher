@@ -88,7 +88,7 @@ describe('ClusterCard label display', () => {
   it('renders a pencil icon (✏) in the card', () => {
     renderCard(makeCluster({ label: null }));
     // Pencil icon should be present (may be opacity-0 / hover-only)
-    expect(screen.getByTitle('Add nickname')).toBeTruthy();
+    expect(screen.getByLabelText('Edit label')).toBeTruthy();
   });
 });
 
@@ -110,7 +110,7 @@ describe('ClusterCard label edit', () => {
 
   it('clicking pencil on null-label card opens edit input', async () => {
     renderCard(makeCluster({ label: null }));
-    const pencilContainer = screen.getByTitle('Add nickname');
+    const pencilContainer = screen.getByLabelText('Edit label');
     fireEvent.click(pencilContainer);
     await waitFor(() => {
       expect(screen.getByRole('textbox')).toBeTruthy();
@@ -121,7 +121,7 @@ describe('ClusterCard label edit', () => {
     const user = userEvent.setup();
     renderCard(makeCluster({ label: null }));
     // Open edit mode
-    fireEvent.click(screen.getByTitle('Add nickname'));
+    fireEvent.click(screen.getByLabelText('Edit label'));
     const input = await screen.findByRole('textbox');
     await user.clear(input);
     await user.type(input, 'Uncle Bob');
@@ -153,7 +153,7 @@ describe('ClusterCard label edit', () => {
   it('shows "Label saved" toast on successful save', async () => {
     const user = userEvent.setup();
     renderCard(makeCluster({ label: null }));
-    fireEvent.click(screen.getByTitle('Add nickname'));
+    fireEvent.click(screen.getByLabelText('Edit label'));
     const input = await screen.findByRole('textbox');
     await user.type(input, 'Aunt Jane');
     fireEvent.blur(input);
@@ -166,7 +166,7 @@ describe('ClusterCard label edit', () => {
     mockMutateAsync.mockRejectedValue(new Error('500: Internal Server Error'));
     const user = userEvent.setup();
     renderCard(makeCluster({ label: null }));
-    fireEvent.click(screen.getByTitle('Add nickname'));
+    fireEvent.click(screen.getByLabelText('Edit label'));
     const input = await screen.findByRole('textbox');
     await user.type(input, 'Bad Label');
     fireEvent.blur(input);
@@ -177,7 +177,7 @@ describe('ClusterCard label edit', () => {
 
   it('input has maxLength={100}', async () => {
     renderCard(makeCluster({ label: null }));
-    fireEvent.click(screen.getByTitle('Add nickname'));
+    fireEvent.click(screen.getByLabelText('Edit label'));
     const input = (await screen.findByRole('textbox')) as HTMLInputElement;
     expect(input.maxLength).toBe(100);
   });

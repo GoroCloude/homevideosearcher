@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import type { ClusterItem } from '../types/api';
 import { useCreatePerson } from '../api/persons';
-import { usePromoteCluster, useIgnoreCluster, useRestoreCluster } from '../api/clusters';
+import { usePromoteCluster, useIgnoreCluster, useRestoreCluster, useLabelCluster } from '../api/clusters';
 import FrameThumbnail from './FrameThumbnail';
+import { addToast } from '../hooks/useToast';
 
 interface Props {
   cluster:          ClusterItem;
@@ -19,15 +20,18 @@ function fmtDate(iso: string | null): string {
 }
 
 export default function ClusterCard({ cluster, onEnrolled, showRestoreOnly, onRestored }: Props) {
-  const [enrolling,   setEnrolling]   = useState(false);
-  const [personName,  setPersonName]  = useState('');
-  const [enrollError, setEnrollError] = useState<string | null>(null);
-  const [enrollDone,  setEnrollDone]  = useState(false);
+  const [enrolling,    setEnrolling]    = useState(false);
+  const [personName,   setPersonName]   = useState('');
+  const [enrollError,  setEnrollError]  = useState<string | null>(null);
+  const [enrollDone,   setEnrollDone]   = useState(false);
+  const [editingLabel, setEditingLabel] = useState(false);
+  const [labelDraft,   setLabelDraft]   = useState(cluster.label ?? '');
 
   const createPerson   = useCreatePerson();
   const promoteCluster = usePromoteCluster();
   const ignoreCluster  = useIgnoreCluster();
   const restoreCluster = useRestoreCluster();
+  const labelCluster   = useLabelCluster();
 
   async function handleEnroll(e: React.FormEvent) {
     e.preventDefault();
@@ -68,6 +72,22 @@ export default function ClusterCard({ cluster, onEnrolled, showRestoreOnly, onRe
     }
   }
 
+  async function handleLabelBlur() {
+    const trimmed  = labelDraft.trim();
+    const newLabel = trimmed || null;    // empty string → null (CLU-04: clear label)
+    if (newLabel === cluster.label) {    // no-op if unchanged
+      setEditingLabel(false);
+      return;
+    }
+    try {
+      await labelCluster.mutateAsync({ clusterId: cluster.id, label: newLabel });
+      addToast('Label saved', 'success');
+    } catch {
+      addToast('Failed to save label', 'error');
+    }
+    setEditingLabel(false);
+  }
+
   const isPending = createPerson.isPending || promoteCluster.isPending;
 
   return (
@@ -96,6 +116,38 @@ export default function ClusterCard({ cluster, onEnrolled, showRestoreOnly, onRe
         <div className="text-xs text-gray-500 space-y-0.5">
           <p>First seen: <span className="text-gray-700">{fmtDate(cluster.first_seen)}</span></p>
           <p>Last seen:  <span className="text-gray-700">{fmtDate(cluster.last_seen)}</span></p>
+        </div>
+
+        {/* Inline label edit — CLU-01 (save), CLU-02 (display), CLU-04 (clear) */}
+        <div className="mt-1">
+          {editingLabel ? (
+            <input
+              type="text"
+              value={labelDraft}
+              onChange={e => setLabelDraft(e.target.value)}
+              onBlur={handleLabelBlur}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+              maxLength={100}
+              autoFocus
+              className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+            />
+          ) : cluster.label ? (
+            <div
+              className="flex items-center gap-1 cursor-pointer group"
+              onClick={() => { setLabelDraft(cluster.label ?? ''); setEditingLabel(true); }}
+            >
+              <span className="text-xs text-gray-700 truncate">{cluster.label}</span>
+              <span className="text-gray-400 group-hover:text-gray-600 text-xs">✏</span>
+            </div>
+          ) : (
+            <div
+              className="flex items-center gap-1 cursor-pointer opacity-0 group-hover:opacity-100"
+              onClick={() => { setLabelDraft(''); setEditingLabel(true); }}
+              aria-label="Edit label"
+            >
+              <span className="text-gray-400 text-xs">✏</span>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
