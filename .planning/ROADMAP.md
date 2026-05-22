@@ -53,10 +53,11 @@ Plans:
 
 **Done when:**
 - [ ] Clicking a detection count, face count cell, or the row itself on the Videos page navigates to `/videos/:id`; a dedicated row icon also links to the detail page
-- [ ] The detail page displays video metadata (filename, duration, status, ingestion date) and a Play button that opens the video stream in-page
-- [ ] The "Detections" tab renders a responsive grid of frame thumbnails; each card shows class label, confidence, and timestamp
-- [ ] The "Faces" tab renders a grid of face thumbnails each showing person name or "Unknown Cluster #N" and timestamp, plus a timeline bar where clicking any mark seeks the video player to that timestamp
-- [ ] A Delete button on the Videos page row (confirmation dialog) and a Delete button on the detail page (confirmation dialog → navigate back to Videos) both remove the video; it disappears from the Videos grid, Search results, and cluster membership immediately with no stale data visible
+- [x] Clicking a detection count, face count cell, or the row itself on the Videos page navigates to `/videos/:id`; a dedicated row icon also links to the detail page
+- [x] The detail page displays video metadata (filename, duration, status, ingestion date) and a Play button that opens the video stream in-page
+- [x] The "Detections" tab renders a responsive grid of frame thumbnails; each card shows class label, confidence, and timestamp
+- [x] The "Faces" tab renders a grid of face thumbnails each showing person name or "Unknown Cluster #N" and timestamp, plus a timeline bar where clicking any mark seeks the video player to that timestamp
+- [x] A Delete button on the Videos page row (confirmation dialog) and a Delete button on the detail page (confirmation dialog → navigate back to Videos) both remove the video; it disappears from the Videos grid, Search results, and cluster membership immediately with no stale data visible
 
 **UI hint**: yes
 
@@ -66,8 +67,8 @@ Plans:
 
 | Phase | Plans | Status | Completed |
 |-------|-------|--------|-----------|
-| 6 — Video Detail & Delete API | 2 | 🔄 Checkpoint | 2/2 plans (human verify pending) |
-| 7 — Video Detail Page + Delete UI | TBD | ⏳ Pending | — |
+| 6 — Video Detail & Delete API | 2 | ✅ Complete | 2026-05-22 |
+| 7 — Video Detail Page + Delete UI | 3 | ✅ Complete | 2026-05-22 |
 
 ---
 

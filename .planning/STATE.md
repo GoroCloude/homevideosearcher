@@ -2,9 +2,9 @@
 
 ## Current Status
 
-**Phase:** Phase 6 — Video Detail & Delete API (plan 02 complete)  
-**Active plan:** 07-01  
-**Last action:** 06-02 complete — DELETE /videos/{id} with atomic DB cascade (face_detections → detections → frames → videos) + best-effort MinIO cleanup using remove_objects(DeleteObject); 204 No Content; auth via router-level require_token in main.py
+**Phase:** Phase 7 — Video Detail Page + Delete UI ✅ Complete  
+**Active plan:** none  
+**Last action:** Phase 7 complete — VideoDetailPage (metadata, player, detection/face tabs, timeline seek, delete dialog), VideosPage row-click nav + delete. Bug fix: detections/faces endpoints corrected for actual DB schema (class_name not label, bbox_x1-y2 not bbox_json, known_persons not persons, uc.label not uc.label_name).
 
 ## Project Reference
 
@@ -19,7 +19,7 @@ See: .planning/PROJECT.md (updated 2026-05-21)
 
 ## Next Step
 
-Phase 6 (first phase of v1.1). Run `/gsd-plan-phase 6` once ROADMAP.md is set.
+v1.1 milestone complete (Phase 6 + Phase 7). Run `/gsd-complete-milestone` to archive, or `/gsd-new-milestone` to plan v1.2.
 
 ## Phase Snapshot
 
@@ -30,8 +30,8 @@ Phase 6 (first phase of v1.1). Run `/gsd-plan-phase 6` once ROADMAP.md is set.
 | 3 — Intelligence & Telegram Digest | HDBSCAN clustering, stable cluster UUIDs, Telegram album digest | ✅ Complete |
 | 4 — Web UI | React UI for search, persons, clusters, settings | ✅ Complete |
 | 5 — Video Upload UI | Upload videos from browser → MinIO → auto-ingest | ✅ Complete |
-| 6 — Video Detail & Delete API | New GET+DELETE video endpoints; hard-delete cascade; bearer auth | ⏳ Pending |
-| 7 — Video Detail Page + Delete UI | VideoDetailPage route, tabs, timeline, delete dialogs | ⏳ Pending |
+| 6 — Video Detail & Delete API | New GET+DELETE video endpoints; hard-delete cascade; bearer auth | ✅ Complete |
+| 7 — Video Detail Page + Delete UI | VideoDetailPage route, tabs, timeline, delete dialogs | ✅ Complete |
 
 ## Decisions
 
