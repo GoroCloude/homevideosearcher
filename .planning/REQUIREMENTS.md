@@ -28,7 +28,7 @@
 - [ ] **AUTO-01**: A `watcher` Docker Compose service monitors a configured local folder; new video files are automatically uploaded to MinIO and ingested through the full pipeline (YOLO + InsightFace + face matching)
 - [ ] **AUTO-02**: Watcher waits for a file write to fully complete before triggering upload (`on_closed` watchdog event or size-stability polling fallback)
 - [ ] **AUTO-03**: On container start, watcher scans the folder and queues any eligible files not yet ingested (handles files dropped during service downtime)
-- [ ] **AUTO-04**: Only `.mp4`, `.mov`, `.avi`, `.mkv` files trigger the pipeline; all other file types are silently ignored
+- [ ] **AUTO-04**: Only `.mp4`, `.mov`, `.avi`, `.mkv`, `.m4v` files trigger the pipeline; all other file types are silently ignored
 - [ ] **AUTO-05**: Ingestion worker serialises ML pipeline execution with a `Semaphore(1)` to prevent concurrent YOLO+InsightFace runs from exhausting the 8 GB RAM host
 - [ ] **AUTO-06**: Watcher emits one structured log line per file state transition: `DETECTED | STABLE | UPLOADING | QUEUED | SKIPPED | ERROR`
 - [ ] **AUTO-07**: `WATCH_USE_POLLING=true` environment variable switches the watcher to polling mode for NFS/CIFS mounts where Linux inotify is unavailable
