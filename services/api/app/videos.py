@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from . import config
 from .db import get_pool
-from .storage import generate_presigned_url, generate_presigned_upload_url
+from .storage import generate_presigned_url, generate_presigned_upload_url, get_minio_client
 
 logger = logging.getLogger(__name__)
 
@@ -374,3 +374,92 @@ async def stream_video(video_id: UUID) -> RedirectResponse:
         expires_hours=1,
     )
     return RedirectResponse(url=url, status_code=302)
+
+
+@router.delete("/{video_id}", status_code=204)
+async def delete_video(video_id: UUID) -> None:
+    """
+    Hard-deletes a video and all associated data.
+
+    DB deletion order (FK-safe, inside one transaction):
+      1. face_detections WHERE frame_id IN (SELECT id FROM frames WHERE video_id = $1)
+      2. detections       WHERE frame_id IN (SELECT id FROM frames WHERE video_id = $1)
+      3. frames           WHERE video_id = $1
+      4. videos           WHERE id = $1
+
+    MinIO cleanup (after DB transaction commits — best-effort):
+      - Video file: remove_object(MINIO_BUCKET_VIDEOS, video.minio_key)
+      - Frame thumbnails: remove_objects(MINIO_BUCKET_FRAMES, [DeleteObject(f.minio_key) for f in frames])
+
+    MinIO errors are logged but do NOT raise — DB deletion is authoritative.
+    Auth: inherited from videos_router → router-level dependency in main.py (returns 401 if missing/invalid).
+
+    Security — T-06-06 (Spoofing): No auth code here; router-level dependency in main.py covers it.
+    Security — T-06-07 (Tampering): video_id is UUID type — FastAPI rejects non-UUIDs with 422.
+    """
+    from minio.deleteobjects import DeleteObject
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # 1. Verify video exists
+        video = await conn.fetchrow(
+            "SELECT minio_key FROM videos WHERE id = $1", video_id
+        )
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+
+        # 2. Capture frame minio_keys BEFORE deletion (needed for MinIO cleanup)
+        frame_rows = await conn.fetch(
+            "SELECT minio_key FROM frames WHERE video_id = $1", video_id
+        )
+
+        # 3. Delete in FK-safe order — atomic transaction
+        async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM face_detections"
+                " WHERE frame_id IN (SELECT id FROM frames WHERE video_id = $1)",
+                video_id,
+            )
+            await conn.execute(
+                "DELETE FROM detections"
+                " WHERE frame_id IN (SELECT id FROM frames WHERE video_id = $1)",
+                video_id,
+            )
+            await conn.execute(
+                "DELETE FROM frames WHERE video_id = $1", video_id
+            )
+            await conn.execute(
+                "DELETE FROM videos WHERE id = $1", video_id
+            )
+
+    # 4. MinIO cleanup — after DB commit; errors are best-effort (logged, not raised)
+    client = get_minio_client()
+
+    # 4a. Delete video file
+    try:
+        client.remove_object(config.MINIO_BUCKET_VIDEOS, video["minio_key"])
+        logger.info("Deleted MinIO video object: %s/%s", config.MINIO_BUCKET_VIDEOS, video["minio_key"])
+    except Exception as exc:
+        logger.warning(
+            "MinIO video delete failed for %s/%s: %s",
+            config.MINIO_BUCKET_VIDEOS, video["minio_key"], exc,
+        )
+
+    # 4b. Bulk-delete frame thumbnails
+    if frame_rows:
+        errors = list(
+            client.remove_objects(
+                config.MINIO_BUCKET_FRAMES,
+                iter(DeleteObject(r["minio_key"]) for r in frame_rows),
+            )
+        )
+        if errors:
+            logger.warning(
+                "MinIO frame delete errors for video %s: %s",
+                video_id, errors,
+            )
+        else:
+            logger.info(
+                "Deleted %d MinIO frame objects for video %s",
+                len(frame_rows), video_id,
+            )
