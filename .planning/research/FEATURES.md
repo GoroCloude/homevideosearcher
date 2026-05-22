@@ -1,4 +1,158 @@
-# Features Research: HomeVideoSearcher
+# Features Research — v2.0: Smart Labels, Person Pages & Auto-Ingest
+
+> **NOTE:** This file supersedes the v1.0 feature research for the three NEW features only.
+> The v1.0 table-stakes / differentiator / anti-feature analysis below it remains valid as
+> historical reference. Scroll to the bottom for the original v1 research.
+
+---
+
+**Domain:** Home security video search — incremental v2.0 feature additions  
+**Researched:** 2026-05  
+**Confidence:** HIGH (all three features grounded in direct codebase reading)
+
+---
+
+## Cluster Nickname Labeling
+
+### Dependency on Existing System
+
+- `unknown_clusters` table already has a `label TEXT` column (present since `001_schema.sql`). **No migration needed.**
+- `ClusterResponse` Pydantic model does NOT expose `label` → needs one new field.
+- `GET /clusters` SQL query does NOT SELECT `label` → needs one line change.
+- `ClusterCard.tsx` has no label UI whatsoever.
+- `digest.py` caption is hardcoded `"Unknown person — seen {count}×, …"` — does not check `label`.
+- A new `PATCH /clusters/{id}/label` endpoint (or `PUT`) is needed; no existing endpoint handles label writes.
+
+### Table Stakes
+
+| Behavior | Why Expected | Notes |
+|----------|--------------|-------|
+| Inline edit on ClusterCard | User is already on the Clusters page; navigating away to label breaks flow | Single click-to-edit pattern (text field replaces static text) |
+| Label persists across page reloads and re-cluster runs | Meaningless if it resets every night | The nightly HDBSCAN run uses stable UUIDs and only upserts `appearance_count`, `first_seen`, `last_seen`, `representative_face_id` — it does NOT clear `label`. Already safe. |
+| Label visible on the cluster card in the Clusters page grid | "I labeled it — why can't I see it?" | Replace the anonymous "Unknown person" placeholder with the label, visually distinct |
+| Label included in Telegram digest caption | The whole point is to reduce "Unknown person × 47" noise | Replace `"Unknown person"` with label value if not NULL |
+| Empty label accepted (clear/remove a label) | User made a typo or changed their mind | PATCH accepts `null` or `""` to reset label |
+| Label does NOT promote cluster to known person | These are distinct actions | Label = nickname for tracking; Promote = full enrollment with embeddings |
+
+### Differentiators
+
+| Behavior | Value | Notes |
+|----------|-------|-------|
+| Label appears in video detail faces tab | When reviewing footage, "Delivery guy" is more useful than "Unknown cluster abc123" | Faces tab already shows cluster info per frame; cluster label can be fetched via join |
+| Label shown as a soft badge on cluster thumbnail | Visual differentiation — labeled clusters stand out from unnamed ones | A colored tag (e.g., amber "📎 Delivery guy") signals "we know who this is roughly" |
+| Label auto-suggests from existing labels | If user has typed "delivery guy" before on another cluster, suggest it | Low complexity: `datalist` HTML element fed with distinct existing labels from API |
+| Labeled clusters sorted above unlabeled ones | Once labeled, they are "known unknowns" — users want to see them first | Trivial ORDER BY `label IS NULL, label` on `GET /clusters` |
+
+### Anti-Features / Complexity Traps
+
+| Trap | Why to Avoid | What to Do Instead |
+|------|--------------|-------------------|
+| **Merging clusters on label collision** | If user labels two clusters "Delivery guy", do NOT merge their embeddings — HDBSCAN already determined they are distinct clusters | Labels are purely cosmetic; clusters remain independent |
+| **Making label a first-class person** | Label ≠ enrollment; do not create a `known_persons` row, do not run pgvector rematch | Keep the promote flow separate; label is just a display string |
+| **Optimistic UI that races the PATCH** | If the PATCH is slow and the user saves, then immediately clicks promote, the label may not be persisted | Use `react-query` mutation; keep the promote button disabled while label PATCH is in-flight |
+| **Large freeform text / markdown** | This is a short identifier, not a notes field | Max 80 chars; plain text; no markdown rendering needed |
+| **Confirmation dialog for label save** | Over-engineering a text field | Press Enter / blur to save, toast confirms |
+
+---
+
+## Person Appearance Page
+
+### Dependency on Existing System
+
+- `GET /persons/{person_id}/faces` endpoint **already exists** in `persons.py` — returns paginated `face_detections` with `frame_id`, `video_id`, `ts_ms`, `match_tier`, `match_similarity`, `thumbnail_url`.
+- BUT: it returns individual face detection rows, not grouped by video. A large person (Alice with 1 400 face detections across 50 videos) produces a flat list — unsuitable for "videos they appear in."
+- A second endpoint `GET /persons/{person_id}/appearances` (grouped by video, with per-video thumbnail + timestamps) is needed.
+- Route `/people/:id` does NOT exist in `App.tsx` (only `/people`).
+- `PersonCard.tsx` exists but has no clickable link to a detail page.
+- The `GET /persons` list query and `PersonResponse` model already include `name`, `created_at`, `enrollment_count` — enough data to render a page header.
+
+### Table Stakes
+
+| Behavior | Why Expected | Notes |
+|----------|--------------|-------|
+| Route `/people/:id` navigates to a person-specific page | Core navigation pattern; clicking a person card should go somewhere | New page component + route registration |
+| List of videos the person appears in | Primary value: "What videos is Alice in?" | Each row: video filename, date, thumbnail of one representative face, count of appearances in that video, link to `VideoDetailPage` at the right timestamp |
+| Face thumbnail per video entry | Visual confirmation; prevents blind clicks | Use the face detection with highest `det_score` from that video as the per-video thumbnail — same `FrameThumbnail` component already in use |
+| Timestamp link — click → video at first appearance | Users want to jump directly to the moment | Link to `/videos/:id` and pass `?t=ts_ms` (VideoDetailPage can seek on mount) |
+| Sorted chronologically (newest first) | Security context: most recent sightings are most interesting | Default sort; togglable |
+| Total count and date range in page header | "Alice — 1 400 appearances, Jan 2024 → May 2026" | Aggregate from `face_detections` — already available in existing /faces endpoint total |
+| Empty state for newly enrolled person | Person exists but no footage yet matched | Simple message: "No footage found — run Rematch to scan historical videos" |
+
+### Differentiators
+
+| Behavior | Value | Notes |
+|----------|-------|-------|
+| Chronological calendar / date heat-map | "When does Alice usually appear?" — useful for understanding family routines | A simple `d3`-free implementation: group by date, render a grid of 7-day weeks with color intensity. Libraries: `react-calendar-heatmap` (2 kB, no d3 dep) or pure CSS grid. |
+| Per-video appearance count badge | "Alice appears in 47 frames in this video" vs "1 frame" — helps triage | Included in the grouped `appearances` query |
+| Filter by date range | Narrow to "who appeared last week" | Reuse existing date picker pattern from SearchPage |
+| Match tier badge per appearance | "Confident" vs "Probable" — gives user trust signal | Already in `face_detections.match_tier` |
+| "Find more" button → Rematch | If person was recently enrolled, historical footage may not be matched yet | Links to existing `POST /persons/{id}/rematch` — already implemented |
+
+### Anti-Features / Complexity Traps
+
+| Trap | Why to Avoid | What to Do Instead |
+|------|--------------|-------------------|
+| **Loading all face detections in one query** | Alice with 1 400 detections: sending all to frontend is slow and pointless | Group server-side: `SELECT video_id, COUNT(*), MIN(ts_ms), MAX(ts_ms), best_frame_id FROM face_detections ... GROUP BY video_id` — returns one row per video |
+| **Infinite scroll on appearances list** | For a family member with 50 videos, pagination is unnecessary complexity | Show all videos grouped; paginate only if >100 videos (edge case) |
+| **Live-updating calendar** | Page is for review, not real-time | Static render on load; no polling needed |
+| **Separate "timeline" and "video list" tabs** | Small feature; two tabs fragments UX | Single page: calendar heat-map at top (collapsible), video list below |
+| **Re-implementing VideoDetailPage navigation** | VideoDetailPage already handles `?t` seek | Emit a link with `?t=ts_ms` query param; VideoDetailPage handles the seek |
+| **Showing every individual face detection** | Not useful; overwhelming for active family members | Show per-video grouped rows only; individual detections exist in VideoDetailPage's faces tab |
+
+---
+
+## Watch-Folder Auto-Ingest
+
+### Dependency on Existing System
+
+- `POST /ingest` on the ingestion-worker already accepts `{ minio_key: string }` and runs the full pipeline (YOLO + InsightFace + pgvector). **The entire ingestion pipeline is reused.**
+- `POST /ingest` already deduplicates: if `minio_key` exists with `status=done` and `force=False`, it returns `skipped`.
+- MinIO client (`minio` Python SDK) is already wired in `ingestion-worker/app/storage.py`.
+- The watch-folder daemon needs to: detect file → upload to MinIO → call `POST /ingest`.
+- Two viable Python options: **`watchdog`** library (cross-platform inotify wrapper) vs **inotifywait** shell script. Use `watchdog` — it runs inside Docker, same environment as the worker, no shell script maintenance.
+- The daemon is a **new Docker Compose service** — a lightweight Python script, NOT embedded in the ingestion worker (no shared memory for ML models; separate process keeps memory usage clear under the 8 GB constraint).
+
+### Table Stakes
+
+| Behavior | Why Expected | Notes |
+|----------|--------------|-------|
+| New file in configured folder triggers upload + ingest automatically | That is the entire feature; anything less requires manual intervention | `watchdog` `FileSystemEventHandler.on_created` or `on_moved` |
+| Only video file extensions trigger pipeline | Without this, any file (`.jpg`, `.txt`, `.tmp`) fires ingestion | Whitelist: `.mp4`, `.mov`, `.avi`, `.mkv` — matches existing `_VIDEO_EXTENSIONS` in ingestion worker |
+| Skip files still being written | If a 4 GB `.mp4` is still copying when the `on_created` event fires, ingestion starts on an incomplete file | Wait until file size stops changing for N seconds (stability check: poll size every 2s, wait for 2 consecutive equal readings) |
+| Idempotent restart | Daemon restarts, folder already has files — do NOT re-ingest already-processed files | `POST /ingest` returns `skipped` for `status=done` videos; daemon trusts this |
+| MinIO key scheme consistent with manual upload | Files ingested via watch-folder must use the same `videos/{filename}` key so search UI works identically | Use same `MINIO_BUCKET_VIDEOS` + `videos/{filename}` path pattern |
+| Configurable watch path | Not everyone has footage at `/mnt/footage` | `WATCH_FOLDER` env var; mounted as Docker volume |
+| Logged clearly | User needs to know "file detected, uploaded, queued" or "skipped (already done)" | Structured log lines: `DETECTED`, `UPLOADED`, `QUEUED`, `SKIPPED`, `ERROR` |
+
+### Differentiators
+
+| Behavior | Value | Notes |
+|----------|-------|-------|
+| Recursive subdirectory watching | Camera systems often create `YYYY/MM/DD/` subdirs | `watchdog` `recursive=True` on `Observer.schedule` — trivial one-line change |
+| Watch-folder status in web UI (simple) | "3 files processed today via watch-folder" — closing the feedback loop | Low effort: the existing Videos page already shows all ingested videos; watch-folder files appear there automatically. No extra UI strictly needed. |
+| Configurable stability wait time | Different network mounts / cameras have different write speeds | `WATCH_STABLE_SECONDS` env var (default: 5) |
+| Duplicate filename handling | Same filename dropped again (e.g., camera overwrites) | Use content hash as MinIO key suffix, OR use `videos/{date}/{filename}` path, OR rely on `minio_key UNIQUE` constraint and `?force=false` idempotency |
+| File move/rename detection | Some cameras write to `.tmp` then rename to `.mp4` | Handle `on_moved` event (source `.tmp`, dest `.mp4`) in addition to `on_created` |
+
+### Anti-Features / Complexity Traps
+
+| Trap | Why to Avoid | What to Do Instead |
+|------|--------------|-------------------|
+| **Embedding watcher in ingestion-worker process** | The ingestion worker holds YOLO + InsightFace in memory (up to 3–4 GB). A second ML load for the watcher is out of the question on 8 GB RAM. | Separate lightweight Docker service (Python + watchdog + minio + requests only; ~50 MB) |
+| **Using MinIO bucket event notifications instead** | MinIO events fire AFTER the file is in MinIO. The watch-folder requirement is for files dropped onto a local disk folder BEFORE they're in MinIO. These are different triggers. | Filesystem watcher is the right tool here |
+| **Polling instead of inotify** | Polling every N seconds wastes CPU and introduces latency. `watchdog` uses OS-level inotify on Linux — zero polling overhead. | Use `watchdog`; set `recursive=True` |
+| **Re-uploading already-uploaded files** | On restart, all files in the folder are "new" to the watcher. Re-uploading 100 GB of footage is catastrophic. | On startup, do NOT scan existing files. Let the DB idempotency handle the rare restart edge case — `POST /ingest` returns `skipped`. If re-upload risk is a concern, maintain a small local `.ingested` marker file per processed file. |
+| **Processing files from multiple threads simultaneously** | i5-6200, 8 GB RAM, CPU-only ML. Two parallel ingestion jobs = OOM kill. | `POST /ingest` uses FastAPI `BackgroundTasks` which already serializes jobs (single worker thread). The watcher just fires the HTTP call — the worker queues naturally. |
+| **Watch-folder UI page** | For a single-user home system, a dedicated UI page for the watcher is scope creep. | The Videos page already shows status for all ingested files. Log output is sufficient for operational visibility. |
+| **Removing the manual upload button** | Watch-folder is additive, not a replacement. Manual upload via web UI is still useful for one-off files from a phone or USB drive. | Keep both paths. |
+
+---
+
+---
+
+# (Original v1.0 Feature Research — archived reference)
+
+
 
 **Domain:** Self-hosted home security video search / face recognition / family archive  
 **Researched:** 2025-05  

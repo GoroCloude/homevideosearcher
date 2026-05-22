@@ -301,3 +301,142 @@ n8n's S3/MinIO trigger node requires MinIO webhook configuration. If MinIO event
 - onnxruntime: https://pypi.org/project/onnxruntime/ (v1.26.0)
 - minio: https://pypi.org/project/minio/ (v7.2.20)
 - uv: https://pypi.org/project/uv/ (v0.11.14)
+
+---
+
+# Stack Research — v2.0
+
+**Milestone:** v2.0 Smart Labels, Person Pages & Auto-Ingest  
+**Researched:** 2026-05-22  
+**Scope:** ADDITIONS ONLY — do not re-research the validated v1.x stack above.  
+**Confidence:** HIGH (verified against PyPI, Context7 watchdog docs, live schema inspection)
+
+---
+
+## New Dependencies
+
+| Feature | Package | Version | Reason |
+|---------|---------|---------|--------|
+| Watch-folder daemon | `watchdog` | `6.0.0` | Filesystem event monitoring on Linux via inotify kernel API. Pure-Python, well-maintained, ships `InotifyObserver` (event-driven, zero polling). Latest as of 2026-05. |
+| Watch-folder daemon | `requests` | `>=2.32` | Simple sync HTTP to call `POST /ingest` on the ingestion-worker. Watchdog event handlers run in OS threads (not async), so a synchronous HTTP client is the correct fit. Already a transitive dep in the Python ecosystem; no weight added. |
+
+> `minio==7.2.20` is already a dependency of both `api` and `ingestion-worker`. The new `watch-folder` service reuses the same version — no version conflict.
+
+---
+
+## No New Dependencies Needed
+
+### Feature 1 — Cluster nickname labeling
+
+- **DB schema:** `label TEXT` column already exists in `unknown_clusters` in `001_schema.sql` (line 84). No migration file needed.  
+- **API:** Needs a `PATCH /clusters/{id}/label` endpoint and `label` field added to `ClusterResponse`. Pure Python — no new packages.  
+- **React UI:** Inline text input wired to a TanStack Query `useMutation`. `@headlessui/react` (already installed) covers the editable field pattern. No new npm package.
+
+### Feature 2 — Person appearance page (`/people/:id`)
+
+- **Routing:** `react-router-dom 6.30.1` already installed — add a `<Route path="/people/:id" />`.  
+- **Data fetching:** TanStack Query v5 already installed — one new `useQuery` call.  
+- **Date/time formatting:** `date-fns 4.1.0` already installed — covers timestamp display.  
+- **Thumbnails:** presigned URL pattern already implemented in `GET /frames/:id/image` — reuse directly.  
+- **No new npm or Python packages required.**
+
+### Feature 3 — Watch-folder daemon (React/UI side)
+
+No UI changes required. The watch-folder service is entirely backend. Users drop files into a folder on the homeserver; the pipeline is invisible.
+
+---
+
+## Migration Notes
+
+**No new migration file is needed for v2.0.**
+
+`label TEXT` was included in the initial schema (`db/init/001_schema.sql`, `unknown_clusters` table). The existing `ON CONFLICT DO UPDATE` in `POST /cluster/run` deliberately omits `label` from the update clause, so re-running clustering preserves user-assigned labels. The column is live in all environments.
+
+**Migration pattern to maintain:** The project uses hand-written numbered SQL files (`db/migrations/NNN_*.sql`) applied manually (not Alembic). Do NOT introduce Alembic for v2.0 — it would add SQLAlchemy as a dependency and require model mirroring for a codebase that uses raw asyncpg. The plain-SQL pattern is correct for this project size.
+
+---
+
+## Watch-Folder Library Decision
+
+### Options evaluated
+
+| Library | Mechanism | Linux support | Docker bind-mount safe | Complexity |
+|---------|-----------|--------------|----------------------|------------|
+| `watchdog` (InotifyObserver) | inotify kernel API — event-driven | ✅ Native | ✅ Yes — inotify works on host kernel; events propagate to container | Low (high-level API) |
+| `inotify-simple` / `inotify` | Raw inotify syscall bindings | ✅ Native | ✅ Yes | High (manual fd management, no handler pattern) |
+| `watchdog` (PollingObserver) | Periodic `os.stat` scan | ✅ Any OS | ✅ Yes (but also works on NFS/SMB) | Low |
+| Pure polling loop (manual) | `os.listdir` + sleep | ✅ Any OS | ✅ Yes | Medium (must track seen files, race conditions) |
+
+### Recommendation: `watchdog 6.0.0` with `InotifyObserver`
+
+**Why watchdog over inotify-simple:**  
+`inotify-simple` requires manual file-descriptor management, event-loop integration, and path reconstruction. `watchdog` wraps all of this into a clean `FileSystemEventHandler` subclass. For a daemon that calls one HTTP endpoint on file creation, the low-level API adds no value.
+
+**Why InotifyObserver over PollingObserver:**  
+The homeserver is Ubuntu Linux — inotify is available and efficient. Polling burns CPU checking for changes every N seconds and adds latency. InotifyObserver fires within milliseconds of a kernel-level close event. Use `PollingObserver` only if the watch directory is on a network share (NFS/SMB) where inotify does not propagate.
+
+**Critical inotify subtlety — use `on_closed()` not `on_created()`:**  
+When a large video file is copied into the watch folder, `FileCreatedEvent` fires the moment the file appears — before the copy completes. Attempting to upload a partial file to MinIO produces a corrupted object. On Linux, watchdog maps `IN_CLOSE_WRITE` (inotify kernel event fired when the last write FD is closed) to `FileClosedEvent`, handled via `on_closed()`. This is the correct trigger for a watch-folder use case. Verified in Context7 watchdog docs — `on_closed()` is a supported handler method.
+
+```python
+from watchdog.observers.inotify import InotifyObserver
+from watchdog.events import FileSystemEventHandler, FileClosedEvent
+
+class VideoDropHandler(FileSystemEventHandler):
+    def on_closed(self, event: FileClosedEvent) -> None:
+        # File is fully written — safe to upload
+        if not event.is_directory:
+            upload_and_ingest(event.src_path)
+
+observer = InotifyObserver()
+observer.schedule(VideoDropHandler(), path="/watch", recursive=False)
+observer.start()
+```
+
+**Docker bind-mount behavior:**  
+inotify operates at the Linux kernel level. When the host directory is bind-mounted into the container (`volumes: - /srv/video-drop:/watch`), inotify events generated by writes on the host ARE visible inside the container because they share the same kernel. Confirmed behavior on Linux Docker host — no special configuration needed.
+
+**inotify watch limit:**  
+Default Linux kernel limit: 8192 watches per user (each watched directory = 1 watch). With `recursive=False` (single flat directory), this consumes exactly 1 watch. Not a concern for this project.
+
+### Implementation summary for the new service
+
+```
+services/watch-folder/
+  Dockerfile          # python:3.11-slim, installs watchdog + minio + requests
+  app/
+    main.py           # InotifyObserver loop; uploads to MinIO; POSTs /ingest
+    config.py         # WATCH_DIR, MINIO_*, WORKER_URL env vars
+  requirements.txt    # watchdog==6.0.0, minio==7.2.20, requests>=2.32, python-dotenv>=1.0
+```
+
+Docker Compose addition:
+```yaml
+watch-folder:
+  build: ./services/watch-folder
+  volumes:
+    - /srv/video-drop:/watch   # host path bind-mounted read-write
+  environment:
+    WATCH_DIR: /watch
+    MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+    MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+    MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    MINIO_BUCKET_VIDEOS: ${MINIO_BUCKET_VIDEOS:-videos}
+    WORKER_URL: http://ingestion-worker:8001
+  depends_on:
+    - ingestion-worker
+  networks:
+    - home-infra
+```
+
+No `memory` limit override needed — watchdog + requests is ~30 MB RSS.
+
+---
+
+## Sources
+
+- watchdog 6.0.0: https://pypi.org/project/watchdog/ (latest confirmed 2026-05)
+- watchdog docs (Context7, HIGH confidence): `/gorakhargosh/watchdog` — InotifyObserver, FileClosedEvent, on_closed() handler all verified
+- `unknown_clusters.label` column: `db/init/001_schema.sql` line 84 (direct inspection, HIGH confidence)
+- requests 2.34.x: https://pypi.org/project/requests/
+- inotify kernel docs: https://man7.org/linux/man-pages/man7/inotify.7.html

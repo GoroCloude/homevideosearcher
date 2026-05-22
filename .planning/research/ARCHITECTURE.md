@@ -1,635 +1,369 @@
-# Architecture Research: HomeVideoSearcher
+# Architecture Research  v2.0
 
-**Domain:** Self-hosted, CPU-only video analytics with face recognition  
-**Researched:** 2025-05-16  
-**Confidence:** HIGH — requirements.md provides detailed baseline; research verifies/extends with HDBSCAN, MinIO streaming, memory, and new components
-
----
-
-## Component Map (Updated)
-
-The requirements.md defines a 4-service stack. Two new components are required for v1 clustering and Telegram digest.
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Existing Infra (external)                        │
-│   MinIO (videos/ frames/ enrollment/)   n8n   Cloudflare Tunnel          │
-└──────────┬──────────────────────────┬──────────────────────────────────-┘
-           │ object events / HTTP      │ cron + HTTP POSTs
-           ▼                          ▼
-┌────────────────────────┐   ┌────────────────────────────────────────────┐
-│  ingestion-worker      │   │  api (FastAPI)                              │
-│  FastAPI + Background  │   │  - /videos, /search, /persons, /frames     │
-│  Tasks                 │   │  - /ingest (trigger ingestion-worker)      │
-│  - FFmpeg extraction   │   │  - /stream → 302 presigned MinIO URL       │
-│  - YOLOv8n detection   │   │  - POST /cluster/run  ← NEW               │
-│  - InsightFace embed   │   │  - GET  /digest/preview ← NEW             │
-│  - pgvector matching   │   │  - Telegram send via python-telegram-bot   │
-│  Memory limit: 5 GB    │   └──────────────────┬─────────────────────────┘
-└────────────────────────┘                      │
-           │                                    │
-           └──────────────┬─────────────────────┘
-                          ▼
-           ┌────────────────────────────────────┐
-           │  PostgreSQL 16 + pgvector          │
-           │  + face_clusters table  ← NEW      │
-           └────────────────────────────────────┘
-                          ▲
-           ┌──────────────┘
-           │
-┌────────────────────────┐
-│  web (React 18 + Vite) │
-│  nginx static serving  │
-│  - Search, Videos,     │
-│  - People, Clusters    │
-│    (NEW page)          │
-└────────────────────────┘
-```
-
-### Component Responsibilities
-
-| Component | Responsibility | New in v1 clustering |
-|-----------|---------------|----------------------|
-| `ingestion-worker` | Frame extraction, YOLO, InsightFace, DB writes | No change |
-| `api` | Search, enrollment, presigned URLs, cluster trigger, Telegram send | `POST /cluster/run`, `GET /digest/preview`, Telegram |
-| `postgres` | All persistent state including cluster assignments | `face_clusters` table, `cluster_id` FK on `face_detections` |
-| `web` | React UI including cluster browsing and labeling | Clusters page |
-| `n8n` (external) | Ingestion trigger, daily cron for clustering + digest | New workflow #3: daily cron |
-
-**Do NOT add a separate `batch-worker` container.** HDBSCAN on 512-dim vectors for tens of thousands of embeddings runs in < 5 seconds on CPU (pure Python/NumPy, no ML models). Adding a container for this creates operational complexity for a nightly job that takes seconds. Host it inside `api`.
+**Researched:** 2026-05-22  
+**Confidence:** HIGH  based on full source code audit of services/api, services/web, services/ingestion-worker, docker-compose.yml, and db/init/001_schema.sql  
+**Scope:** Integration analysis for three new v2.0 features: cluster nickname labeling, person appearance page, watch-folder auto-ingest
 
 ---
 
-## Processing Pipeline
+## Component Map
 
-### Per-Video Pipeline (sequential within a single worker process)
+### System Architecture (v1.1 baseline  v2.0 delta)
 
 ```
-1. RECEIVE JOB
-   n8n POSTs {minio_key} → ingestion-worker POST /ingest
-   └─ Set videos.status = 'processing'
 
-2. DOWNLOAD + EXTRACT FRAMES
-   Download video from MinIO to /tmp/work/{video_id}/
-   FFmpeg: 1 fps + scene-change frames
-   Upload frames to MinIO: frames/{video_id}/{ts_ms}.jpg
-   Write frames rows to Postgres
-   └─ Sequential file I/O; no model loaded yet
-
-3. YOLO OBJECT DETECTION  [model loaded once at startup, kept warm]
-   Batch frames (8–16 at a time) through YOLOv8n
-   Filter to configured COCO classes
-   Write detections rows to Postgres
-   └─ ~0.3 s/frame × 8 batch = ~2.4 s per batch; ~0.5 GB VRAM-equiv in RAM
-
-4. INSIGHTFACE FACE ANALYSIS  [model loaded once at startup, kept warm]
-   For each frame that has a 'person' detection OR every Nth frame:
-     Run full-frame through SCRFD (face detector)
-     For each detected face:
-       Compute ArcFace 512-dim embedding (normed_embedding)
-       Cosine search in pgvector against known_persons
-       If similarity ≥ 0.5 → matched_person_id = <UUID>
-       Else → matched_person_id = NULL (unknown)
-       Write face_detections row
-   └─ ~0.5–1.0 s/frame; 1.5 GB RAM
-
-5. FINALIZE
-   Set videos.status = 'done'
-   Cleanup /tmp/work/{video_id}/
-   Log summary (frames, detections, faces found)
+                     External Infra (not in docker-compose.yml)           
+   MinIO (:9000)   n8n (cron)   Cloudflare Tunnel                         
+─-
+        S3 API           POST /cluster/run, POST /digest/send
+                        
+               
+                 api service  (FastAPI :8000/8003)                       
+                 Existing routers: /persons /search /videos /frames      
+                                   /clusters /digest                     
+                 v2.0 MODIFIED: clustering.py  +PATCH /clusters/{id}/label 
+                 v2.0 MODIFIED: persons.py  +GET /persons/{id}/appearances 
+                 v2.0 MODIFIED: digest.py  include label in caption     
+               ─
+                                       asyncpg
+                                      
+               ─
+                 postgres (pgvector :5432)                               
+                 Tables: videos, frames, detections, face_detections,    
+                         known_persons, person_embeddings, unknown_clusters
+                 v2.0 NO schema changes needed (label col exists already) 
+               ─
+       
+          ┐
+            ingestion-worker  (FastAPI :8001)                             
+            POST /ingest  accepts {minio_key}                            
+            POST /ingest/batch                                            
+            v2.0 UNCHANGED                                                
+          ─
+                                                    BACKGROUND TASK
+                                                   
+          
+            ML pipeline (inside ingestion-worker)                         
+            FFmpeg  YOLOv8n  InsightFace buffalo_l  pgvector match     
+          
+       
+          ─
+            watcher service  (NEW v2.0)                                  
+            Python daemon using watchdog library                         
+            Watches /watch volume mount                                  
+          │  On file arrival:                                             
+              1. Upload to MinIO via minio-py (same endpoint/creds)      
+              2. POST http://ingestion-worker:8001/ingest {minio_key}    
+          ─
+       
+          
+            web service  (nginx :80 serving React SPA)                   
+            v2.0 MODIFIED: App.tsx  +/people/:id route                  
+            v2.0 MODIFIED: ClusterCard.tsx  label display + edit form   
+            v2.0 NEW:      PersonDetailPage.tsx                          
+            v2.0 MODIFIED: types/api.ts  ClusterItem.label field        
+            v2.0 MODIFIED: api/clusters.ts  patchClusterLabel()         
+            v2.0 NEW:      api hook usePersonAppearances()               
+          
 ```
-
-**Critical ordering constraint:** Load BOTH models at process startup (not per-frame). 
-Loading InsightFace buffalo_l takes ~3–5 seconds. Loading YOLO takes ~1 second. 
-Always load once in the FastAPI lifespan event; never inside the frame loop.
-
-```python
-# ingestion-worker/app/main.py
-from contextlib import asynccontextmanager
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Load at startup — kept in memory for the process lifetime
-    app.state.yolo = YOLO("yolov8n.pt")
-    app.state.face_app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-    app.state.face_app.prepare(ctx_id=0, det_size=(640, 640))
-    yield
-    # Cleanup on shutdown (GC handles model release)
-```
-
-**Frame batching strategy for YOLO:**
-```python
-# Process in batches of 8-16 frames
-YOLO_BATCH = 8
-for i in range(0, len(frame_paths), YOLO_BATCH):
-    batch = frame_paths[i:i+YOLO_BATCH]
-    results = yolo_model(batch, imgsz=640, conf=0.35, classes=ALLOWED_CLASS_IDS)
-```
-
-InsightFace processes **one frame at a time** (it handles internal batching for multiple faces in a frame). Do not try to batch frames into InsightFace — it accepts a single BGR image array.
 
 ---
 
-## Clustering Strategy
+### New Components
 
-### Where Clustering Fits: Nightly Batch Job (NOT Per-Video)
+| Component | Type | Location | Purpose |
+|-----------|------|----------|---------|
+| `watcher` service | New Docker Compose service | `services/watcher/` | Daemon that monitors `/watch` volume, uploads files to MinIO, triggers ingestion |
+| `PersonDetailPage.tsx` | New React page component | `services/web/src/pages/` | Displays all video appearances for a known person with timestamps/thumbnails |
+| `PATCH /clusters/{id}/label` | New FastAPI endpoint | `services/api/app/clustering.py` | Store freeform label text on an unknown cluster |
+| `GET /persons/{id}/appearances` | New FastAPI endpoint | `services/api/app/persons.py` | Return per-video appearance aggregates for a known person |
+| `usePersonAppearances()` | New TanStack Query hook | `services/web/src/api/persons.ts` | Client-side hook for appearance endpoint |
+| Migration `004_*` | New SQL migration | `db/migrations/` | Not required (label col exists), but add as explicit no-op or skip |
 
-**Do NOT cluster per-video.** A single video has too few unknown faces for HDBSCAN to find meaningful clusters (noise dominates small datasets). The signal emerges only when you cluster across the whole library.
+### Modified Components
+
+| Component | File | What Changes |
+|-----------|------|-------------|
+| `clustering.py` | `services/api/app/clustering.py` | Add `PATCH /clusters/{id}/label` endpoint; add `label` field to `ClusterResponse` Pydantic model; add `label` to `GET /clusters` SELECT |
+| `digest.py` | `services/api/app/digest.py` | Add `uc.label` to SELECT query; update caption logic to use label when present (`{label or "Unknown person"}  seen {count}, {first}  {last}`) |
+| `ClusterCard.tsx` | `services/web/src/components/ClusterCard.tsx` | Add label display (below dates); add inline edit form (pencil icon  text input  save); call `patchClusterLabel` mutation |
+| `ClusterItem` type | `services/web/src/types/api.ts` | Add `label: string \| null` field |
+| `clusters.ts` API | `services/web/src/api/clusters.ts` | Add `patchClusterLabel(id, label)` function; add `useLabelCluster()` mutation hook |
+| `persons.py` | `services/api/app/persons.py` | Add `GET /persons/{id}/appearances` endpoint + Pydantic models |
+| `persons.ts` API | `services/web/src/api/persons.ts` | Add `getPersonAppearances(id)` function; add `usePersonAppearances(id)` query hook |
+| `PersonCard.tsx` | `services/web/src/components/PersonCard.tsx` | Add clickable link to `/people/{id}` |
+| `App.tsx` | `services/web/src/App.tsx` | Add `<Route path="people/:id" element={<PersonDetailPage />} />` |
+| `docker-compose.yml` | root | Add `watcher` service block with volume mount, env vars, network |
+
+---
+
+## Data Flow Changes
+
+### Feature 1: Cluster Nickname Labeling
 
 ```
-Per-video pipeline completes
-         │
-         ▼ (async, no blocking)
-unknown face_detections accumulate in DB
-         │
-         ▼ (nightly, triggered by n8n cron at 02:00)
-POST /cluster/run
-         │
-         ▼
-HDBSCAN on all face_detections WHERE matched_person_id IS NULL
-         │
-         ├─ Cluster 1 (Uncle Tom, 47 appearances across 12 videos)
-         ├─ Cluster 2 (neighbor, 8 appearances)
-         ├─ Noise (-1): one-off faces, false detections → stays unknown
-         │
-         ▼
-Update face_detections.cluster_id
-Upsert face_clusters (representative embedding, face count, thumbnail)
-         │
-         ▼
-Telegram digest for known persons (separate from clustering result)
+User types label in ClusterCard
+   PATCH /api/clusters/{id}/label  {"label": "Delivery person"}
+     UPDATE unknown_clusters SET label=$1 WHERE id=$2
+       TanStack invalidateQueries(['clusters'])
+         ClusterCard re-renders with label displayed
+
+n8n cron  POST /api/digest/send
+   SELECT uc.id, uc.label, uc.appearance_count, ...
+     caption = f"{label or 'Unknown person'}  seen {count}, {first}  {last}"
+       Telegram sendMediaGroup
 ```
 
-### Why HDBSCAN Over DBSCAN
+**Key detail:** `unknown_clusters.label` column was defined in `001_schema.sql` (the initial schema). It is **not** added by any existing migration (002, 003 cover other columns). The live database created from init schema has this column already. No migration required.
 
-| Criterion | DBSCAN | HDBSCAN | Winner |
-|-----------|--------|---------|--------|
-| Unknown cluster count | ✓ (no k needed) | ✓ (no k needed) | Tie |
-| Varying density | ✗ (single eps) | ✓ (multi-scale) | HDBSCAN |
-| Noise handling | ✓ | ✓ | Tie |
-| Hyperparameter sensitivity | High (eps brittle) | Low (min_cluster_size robust) | HDBSCAN |
-| Incremental clustering | ✗ | Partial (approximate_predict) | HDBSCAN |
-| Performance at 10K-100K points | O(n²) naive | O(n log n) with boruvka_kdtree | HDBSCAN |
-| Scikit-learn built-in | ✓ (since 0.15) | ✓ (since 1.3) | Tie |
+### Feature 2: Person Appearance Page
 
-**HDBSCAN wins decisively for this use case.** The key advantage is handling varying density: some people (family members who appear constantly) will have dense clusters; strangers who appear rarely will form sparse clusters. DBSCAN requires a single `eps` that works for all density levels — wrong for this workload.
-
-### HDBSCAN Configuration for Face Embeddings
-
-```python
-from sklearn.cluster import HDBSCAN  # scikit-learn >= 1.3
-import numpy as np
-from sklearn.metrics import pairwise_distances
-
-def cluster_unknown_faces(embeddings: np.ndarray) -> np.ndarray:
-    """
-    embeddings: shape (N, 512), L2-normalized ArcFace embeddings
-    returns: cluster labels array, -1 = noise
-    """
-    if len(embeddings) < 3:
-        return np.full(len(embeddings), -1)
-
-    # Precompute cosine distance matrix
-    # cosine distance = 1 - cosine_similarity (since embeddings are L2-normalized)
-    dist_matrix = 1.0 - np.dot(embeddings, embeddings.T)
-    dist_matrix = np.clip(dist_matrix, 0, None)  # numerical safety
-
-    clusterer = HDBSCAN(
-        min_cluster_size=3,      # at least 3 appearances = real person
-        min_samples=2,            # noise sensitivity; lower = more points in clusters
-        metric='precomputed',     # we supply distance matrix directly
-        cluster_selection_epsilon=0.3,  # merge nearby clusters (cosine dist ≤ 0.3 = same person)
-    )
-    return clusterer.fit_predict(dist_matrix)
+```
+User clicks person name/card (PeoplePage)
+   Navigate to /people/{id}
+     PersonDetailPage mounts
+       usePersonAppearances(id)  GET /api/persons/{id}/appearances
+         SQL:
+            SELECT
+              v.id AS video_id,
+              v.minio_key AS video_minio_key,
+              MIN(f.ts_ms) AS ts_ms,
+              COUNT(fd.id) AS appearance_count,
+              MIN(f.id) AS representative_frame_id
+            FROM face_detections fd
+            JOIN frames f ON f.id = fd.frame_id
+            JOIN videos v ON v.id = f.video_id
+            WHERE fd.matched_person_id = $1
+            GROUP BY v.id, v.minio_key
+            ORDER BY v.ingested_at DESC
+         Returns list of {video_id, video_minio_key, ts_ms, appearance_count, thumbnail_url}
+           thumbnail_url = "/frames/{representative_frame_id}/image"
+            (reuses existing GET /frames/{id}/image  presigned MinIO redirect)
 ```
 
-**Parameter guidance:**
-- `min_cluster_size=3`: A person who appears in only 1–2 frames is classified as noise (-1). Tune up to 5 if you want to reduce false clusters.
-- `cluster_selection_epsilon=0.3`: Equivalent to a similarity threshold of 0.7 — clusters closer than this are merged. Aligns with the 0.5 match threshold (clustering is less strict than identification).
-- Use `metric='precomputed'` with a precomputed cosine distance matrix. Do NOT use `metric='cosine'` directly in HDBSCAN — it runs slower than precomputing with `np.dot`.
+**Key detail:** No new DB tables or columns. All needed data already exists across `face_detections  frames  videos`. The `/frames/{id}/image` redirect endpoint already exists and is public (self-secured by presigned URL). The appearance page reuses it without change.
 
-### Database Schema Additions for Clustering
+**thumbnail_url strategy:** Use `MIN(f.id)` (or `MIN(f.ts_ms)`) as representative frame per video. This is the first frame in the video where the person appears  simple, cheap, no MinIO calls during query.
+
+### Feature 3: Watch-folder Auto-ingest
+
+```
+New file lands in /watch (host bind mount)
+   watchdog FileCreatedEvent in watcher service
+     wait for file stable (no size change for N seconds, e.g. 2s)
+       minio_key = "videos/{filename}"
+       minio_client.put_object(bucket="videos", key=minio_key, data=file_bytes)
+         POST http://ingestion-worker:8001/ingest {"minio_key": minio_key}
+           ingestion-worker returns {"status": "queued", "video_id": "..."}
+             watcher logs success
+               (optional) move or delete source file from /watch
+```
+
+**Key detail on stability wait:** Watchdog fires `on_created` as soon as the OS creates the inode. For large video files being copied, the file is not fully written yet. The watcher **must** poll for file size stability before uploading  otherwise it sends a partial file to MinIO. Recommended: poll `os.path.getsize()` every 0.5s, proceed when size unchanged for 2+ consecutive checks with a minimum wait of 1s.
+
+**Key detail on ingestion-worker auth:** The `ingestion-worker/app/main.py` has **no `require_token` middleware**. `POST /ingest` is unauthenticated  intentionally, since it's an internal service only. The watcher does not need to send an `Authorization` header to ingestion-worker. (Only the `api` service on :8003 has bearer-token auth.)
+
+---
+
+## Build Order Recommendation
+
+**Recommended: Feature 1  Feature 2  Feature 3**
+
+### Phase 1: Cluster Nickname Labeling (smallest scope, zero risk)
+- **Rationale:** Pure additive change. DB column already exists. No new infrastructure. Only touches one API endpoint + one frontend component + digest caption. If something goes wrong, it has zero impact on other features.
+- **Backend:** Add `PATCH /clusters/{id}/label` to `clustering.py`; add `label` to `ClusterResponse` and `GET /clusters` SELECT.
+- **Frontend:** Add `label` to `ClusterItem` type; add `patchClusterLabel` to `clusters.ts`; add label display + edit to `ClusterCard.tsx`.
+- **Digest:** Update `digest.py` caption to use label.
+- **No migration needed.**
+
+### Phase 2: Person Appearance Page (medium scope, additive)
+- **Rationale:** New read-only endpoint + new React page. Does not modify any existing endpoint. Reuses existing `/frames/{id}/image` thumbnail pattern. Builds on the established `GET /persons/{id}/faces` pattern in `persons.py`.
+- **Backend:** Add `GET /persons/{id}/appearances` to `persons.py` with `PersonAppearanceItem` + `PersonAppearancesResponse` Pydantic models.
+- **Frontend:** Add `PersonDetailPage.tsx`; add route to `App.tsx`; add `usePersonAppearances` hook; make `PersonCard` clickable.
+- **No migration needed.**
+
+### Phase 3: Watch-folder Auto-ingest (most infra work, isolated)
+- **Rationale:** New standalone service. Does not touch `api` or `web` at all. Only integration point is `http://ingestion-worker:8001/ingest` (unchanged). Can be built and tested independently. Most infra risk (Docker Compose changes, volume mounts, env vars) is isolated here.
+- **New service:** `services/watcher/`  Python 3.11, `watchdog` + `minio` libraries, Dockerfile.
+- **docker-compose.yml:** Add `watcher` service block.
+- **No migration needed.**
+
+**Why this order:**
+- Feature 1 gives the quickest user-visible win with minimal risk  good momentum starter.
+- Feature 2 is additive-only on the backend and follows the same pattern as existing `/faces` endpoint  low complexity, clear model.
+- Feature 3 is the most infra-heavy but also the most isolated  no existing service is modified, so it can be built last without blocking features 1 or 2.
+
+---
+
+## Docker Networking Notes (watcher service)
+
+### Network topology
+
+All existing Docker Compose services join the **`home-infra` external network**:
+```yaml
+networks:
+  home-infra:
+    external: true
+```
+MinIO, n8n, and Cloudflare Tunnel also run on this same `home-infra` network (they are not in this docker-compose.yml but are pre-existing on the host).
+
+The `watcher` service must be added to this same network to reach both MinIO and ingestion-worker:
+
+```yaml
+watcher:
+  build: ./services/watcher
+  environment:
+    WATCH_PATH: /watch
+    MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+    MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+    MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    MINIO_BUCKET_VIDEOS: ${MINIO_BUCKET_VIDEOS:-videos}
+    MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+    INGESTION_WORKER_URL: http://ingestion-worker:8001
+    DEST_PREFIX: ${WATCHER_DEST_PREFIX:-videos}
+    STABILITY_WAIT_SEC: ${WATCHER_STABILITY_WAIT:-2}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  volumes:
+    - ${WATCH_HOST_PATH:-/mnt/nas/incoming}:/watch:ro
+  depends_on:
+    - ingestion-worker
+  networks:
+    - home-infra
+```
+
+### Hostname resolution
+
+| Target | Hostname from watcher | Port | Notes |
+|--------|----------------------|------|-------|
+| MinIO | `minio` | 9000 | Resolves via `home-infra` Docker network  same as ingestion-worker and api use |
+| ingestion-worker | `ingestion-worker` | 8001 | Resolves via Docker Compose service name on `home-infra` |
+| postgres | Not needed |  | Watcher never touches DB directly |
+| api | Not needed |  | Watcher calls ingestion-worker directly, not api |
+
+### Why watcher calls ingestion-worker, NOT api
+
+The `api` service `POST /ingest`... wait  there is no `/ingest` on the api service. The api service handles `/videos`, `/persons`, `/clusters`, etc. The ingestion-worker at `:8001` is the service that owns `POST /ingest`. This is the correct and direct path. The watcher should POST to `http://ingestion-worker:8001/ingest`  not through the api service.
+
+**No bearer token needed:** `POST /ingest` on ingestion-worker has no auth middleware. It is internal-only, accessible only within the Docker network. The watcher is a trusted internal service.
+
+### Volume mount strategy
+
+Use a **read-only bind mount** from the host watch folder into `/watch` inside the container. The watcher should **move processed files** to a subdirectory (e.g., `/watch/.processed/`) or **delete them** after successful upload, to prevent re-processing on container restart.
+
+Since the container has `:ro` mount, the watcher cannot move/delete. Two options:
+1. Use `:rw` mount and have watcher move file to `.processed/` subfolder after upload
+2. Use `:ro` mount and maintain an in-memory/file set of already-uploaded keys (lost on restart)
+
+**Recommendation:** Use `:rw` mount and move to `{watch_path}/.processed/{filename}` after successful ingest confirmation. This survives container restarts and prevents double-ingestion without needing a separate state store.
+
+### File deduplication
+
+The ingestion-worker already handles idempotency: if `minio_key` already exists with `status=done`, it returns `{"status": "skipped"}`. So even if watcher re-uploads on restart, ingestion-worker will not reprocess.
+
+---
+
+## DB Schema Changes Needed
+
+**No schema changes required for any of the three v2.0 features.**
+
+| Feature | DB Change | Reason |
+|---------|-----------|--------|
+| Cluster nickname labeling |  None | `unknown_clusters.label TEXT` column already exists in `001_schema.sql` (initial schema, not a migration). The live database has this column from day 1. |
+| Person appearance page | ❌ None | All data exists: `face_detections  frames  videos` join provides video_id, ts_ms, appearance count. No new columns needed. |
+| Watch-folder auto-ingest |  None | Watcher writes to MinIO and calls ingestion-worker HTTP API. No direct DB access. |
+
+### Migration file recommendation
+
+Even though no schema change is needed, add a `004_v2.0_marker.sql` migration as a no-op comment block:
 
 ```sql
--- Add to 001_schema.sql or create 002_clustering.sql
-
-CREATE TABLE face_clusters (
-    id              SERIAL PRIMARY KEY,
-    label           INT NOT NULL,          -- HDBSCAN cluster label (0, 1, 2, ...)
-    person_name     TEXT,                  -- NULL until user labels this cluster
-    face_count      INT NOT NULL DEFAULT 0,
-    representative_embedding vector(512),  -- centroid embedding for display
-    thumbnail_minio_key TEXT,              -- best face crop for UI thumbnail
-    created_at      TIMESTAMPTZ DEFAULT now(),
-    last_updated_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Add cluster FK to face_detections
-ALTER TABLE face_detections 
-    ADD COLUMN cluster_id INT REFERENCES face_clusters(id) ON DELETE SET NULL;
-
-CREATE INDEX ON face_detections (cluster_id);
+-- v2.0 migration marker  no schema changes required.
+-- unknown_clusters.label was present in 001_schema.sql from initial deploy.
+-- This file exists to keep migration numbering continuous.
 ```
 
-### Clustering Job Flow (inside `api` service)
-
-```python
-# api/app/routers/cluster.py
-
-@router.post("/cluster/run")
-async def run_clustering(db = Depends(get_db)):
-    """
-    Called by n8n daily cron at 02:00.
-    Runs HDBSCAN on all unmatched face embeddings.
-    """
-    # 1. Fetch all unknown face embeddings with their IDs
-    rows = await db.fetch("""
-        SELECT id, embedding::float[]
-        FROM face_detections
-        WHERE matched_person_id IS NULL
-        ORDER BY id
-    """)
-    
-    if len(rows) < 3:
-        return {"status": "skipped", "reason": "too few unknown faces"}
-    
-    ids = [r["id"] for r in rows]
-    embeddings = np.array([r["embedding"] for r in rows], dtype=np.float32)
-    
-    # 2. Cluster
-    labels = cluster_unknown_faces(embeddings)
-    
-    # 3. Upsert face_clusters and update face_detections
-    # (truncate + rewrite on each run — simple and safe for small-scale)
-    await db.execute("UPDATE face_detections SET cluster_id = NULL WHERE matched_person_id IS NULL")
-    await db.execute("DELETE FROM face_clusters")
-    
-    unique_labels = set(labels) - {-1}
-    for label in unique_labels:
-        mask = labels == label
-        cluster_embeddings = embeddings[mask]
-        centroid = cluster_embeddings.mean(axis=0)
-        centroid /= np.linalg.norm(centroid)
-        
-        cluster_id = await db.fetchval("""
-            INSERT INTO face_clusters (label, face_count, representative_embedding)
-            VALUES ($1, $2, $3::vector)
-            RETURNING id
-        """, int(label), int(mask.sum()), centroid.tolist())
-        
-        cluster_face_ids = [ids[i] for i, m in enumerate(mask) if m]
-        await db.execute("""
-            UPDATE face_detections SET cluster_id = $1
-            WHERE id = ANY($2::bigint[])
-        """, cluster_id, cluster_face_ids)
-    
-    return {"status": "ok", "clusters": len(unique_labels), "noise": int((labels == -1).sum())}
-```
-
-### On-Demand Re-Clustering
-
-Expose `POST /cluster/run?force=true` so the user can trigger re-clustering after labeling a cluster as a known person (which moves those faces to `matched_person_id`, removing them from the unknown pool before next cluster run).
+This keeps the migration sequence clean for future reference.
 
 ---
 
-## Notification Architecture
+## Detailed Integration Points by Feature
 
-### Telegram Daily Digest
+### Feature 1: Cluster Nickname Labeling  Touch Map
 
-**Architecture decision:** The API service sends Telegram directly — do NOT route through n8n for message construction. n8n cron calls `POST /cluster/run` then `POST /digest/send`. Keeping message logic in Python gives you full control over formatting and thumbnail attachment.
+| Layer | File | Change type | Detail |
+|-------|------|-------------|--------|
+| API endpoint | `services/api/app/clustering.py` | ADD endpoint | `PATCH /clusters/{cluster_id}/label`  body `{"label": str}`, UPDATE unknown_clusters SET label=$1 WHERE id=$2 |
+| API model | `services/api/app/clustering.py` | MODIFY | Add `label: Optional[str]` to `ClusterResponse`; add `uc.label` to `GET /clusters` SELECT |
+| Digest caption | `services/api/app/digest.py` | MODIFY | Add `uc.label` to SELECT; caption = `f"{uc['label'] or 'Unknown person'}  seen..."` |
+| TS type | `services/web/src/types/api.ts` | MODIFY | Add `label: string \| null` to `ClusterItem` interface |
+| API client | `services/web/src/api/clusters.ts` | ADD function + hook | `patchClusterLabel(id, label)` + `useLabelCluster()` mutation |
+| UI component | `services/web/src/components/ClusterCard.tsx` | MODIFY | Display label below dates; add pencil/edit inline UI; call `useLabelCluster` |
 
-```
-n8n daily cron (02:00)
-    │
-    ├─ POST http://api:8000/cluster/run      ← clustering
-    │        wait for 200 OK
-    │
-    └─ POST http://api:8000/digest/send      ← Telegram notification
-             builds message from DB query
-             sends via python-telegram-bot
-```
+### Feature 2: Person Appearance Page  Touch Map
 
-**Dependencies:**
-```txt
-# requirements.txt addition for api service
-python-telegram-bot==22.*    # v22 is current as of research date
-```
+| Layer | File | Change type | Detail |
+|-------|------|-------------|--------|
+| API endpoint | `services/api/app/persons.py` | ADD endpoint + models | `GET /persons/{person_id}/appearances` with `PersonAppearanceItem`, `PersonAppearancesResponse` |
+| TS type | `services/web/src/types/api.ts` | ADD | `PersonAppearanceItem`, `PersonAppearancesResponse` interfaces |
+| API client | `services/web/src/api/persons.ts` | ADD function + hook | `getPersonAppearances(id)` + `usePersonAppearances(id)` |
+| New page | `services/web/src/pages/PersonDetailPage.tsx` | CREATE | Grid of video appearance cards with thumbnail, ts_ms, appearance_count; link to video detail |
+| Router | `services/web/src/App.tsx` | MODIFY | Add `<Route path="people/:id" element={<PersonDetailPage />} />` |
+| PersonCard | `services/web/src/components/PersonCard.tsx` | MODIFY | Wrap card/name in `<Link to={/people/${person.id}}>` |
 
-**Implementation pattern:**
-```python
-# api/app/services/telegram.py
-import telegram
-
-async def send_daily_digest(
-    bot_token: str,
-    chat_id: str | int,
-    db,
-    since_hours: int = 24
-):
-    """Send family appearance summary for the last N hours."""
-    bot = telegram.Bot(token=bot_token)
-    
-    # Query DB for recent known person appearances
-    rows = await db.fetch("""
-        SELECT kp.name, COUNT(DISTINCT fd.frame_id) AS appearances,
-               MIN(v.recorded_at) AS earliest_video
-        FROM face_detections fd
-        JOIN known_persons kp ON kp.id = fd.matched_person_id
-        JOIN frames f ON f.id = fd.frame_id
-        JOIN videos v ON v.id = f.video_id
-        WHERE fd.matched_person_id IS NOT NULL
-          AND v.ingested_at >= now() - ($1 || ' hours')::interval
-        GROUP BY kp.name
-        ORDER BY appearances DESC
-    """, since_hours)
-    
-    if not rows:
-        text = "📹 No new family appearances in the last 24 hours."
-    else:
-        lines = ["📹 *Daily Video Summary*\n"]
-        for row in rows:
-            lines.append(f"👤 *{row['name']}*: {row['appearances']} appearances")
-        text = "\n".join(lines)
-    
-    async with bot:
-        await bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode=telegram.constants.ParseMode.MARKDOWN_V2
-        )
+**PersonAppearanceItem shape (recommended):**
+```typescript
+interface PersonAppearanceItem {
+  video_id:         string;
+  video_minio_key:  string;        // for display/navigation
+  ts_ms:            number;        // first appearance timestamp in video
+  appearance_count: number;        // total face detections in this video
+  thumbnail_url:    string;        // "/frames/{representative_frame_id}/image"
+}
 ```
 
-**Environment variables to add:**
-```env
-TELEGRAM_BOT_TOKEN=<bot token from @BotFather>
-TELEGRAM_CHAT_ID=<your personal chat ID>
-TELEGRAM_DIGEST_ENABLED=true
+**SQL query for appearances endpoint:**
+```sql
+SELECT
+    v.id::text              AS video_id,
+    v.minio_key             AS video_minio_key,
+    MIN(f.ts_ms)            AS ts_ms,
+    COUNT(fd.id)::int       AS appearance_count,
+    MIN(f.id)               AS representative_frame_id
+FROM face_detections fd
+JOIN frames f ON f.id = fd.frame_id
+JOIN videos v ON v.id = f.video_id
+WHERE fd.matched_person_id = $1
+GROUP BY v.id, v.minio_key
+ORDER BY MIN(COALESCE(v.recorded_at, v.ingested_at)) DESC
 ```
 
-**Confidence:** HIGH — `python-telegram-bot` v22 confirmed via Context7, `bot.send_message()` API stable.
+### Feature 3: Watch-folder Auto-ingest  Touch Map
+
+| Layer | File | Change type | Detail |
+|-------|------|-------------|--------|
+| New service | `services/watcher/` | CREATE directory | Python package with Dockerfile |
+| Watcher entrypoint | `services/watcher/watcher.py` | CREATE | watchdog Observer loop |
+| Watcher config | `services/watcher/config.py` | CREATE | Env var loading (WATCH_PATH, MINIO_*, INGESTION_WORKER_URL, etc.) |
+| Dockerfile | `services/watcher/Dockerfile` | CREATE | FROM python:3.11-slim; pip install minio watchdog requests |
+| requirements.txt | `services/watcher/requirements.txt` | CREATE | minio, watchdog, requests (no ML libraries needed) |
+| docker-compose.yml | root | MODIFY | Add `watcher:` service block with volume, env, network |
+| .env.example | root | MODIFY | Add WATCH_HOST_PATH, WATCHER_DEST_PREFIX, WATCHER_STABILITY_WAIT |
+
+**Watcher service is intentionally minimal:** no FastAPI, no asyncpg, no ML. Just `minio` + `watchdog` + `requests`. Dockerfile will be tiny (~200MB vs ~8GB for ingestion-worker).
 
 ---
 
-## Memory Management
+## Risk Assessment
 
-### Memory Budget on i5-6200 / 8 GB RAM
-
-| Component | RSS at steady state | Notes |
-|-----------|--------------------|----|
-| OS + system daemons | ~800 MB | Ubuntu minimal |
-| Docker overhead | ~200 MB | Shared kernel |
-| PostgreSQL 16 | ~800 MB – 1.2 GB | `shared_buffers=256MB` default; `effective_cache_size=1GB` |
-| `ingestion-worker` baseline | ~300 MB | FastAPI + asyncpg before models |
-| YOLOv8n model (loaded) | ~500 MB | `.pt` weights + ONNX runtime |
-| InsightFace buffalo_l (loaded) | ~1.4 GB | SCRFD-10GF + ArcFace ONNX |
-| `api` service | ~200 MB | FastAPI + asyncpg + scikit-learn |
-| `web` (nginx) | ~50 MB | Negligible |
-| **Total peak (during ingestion)** | **~5.25 GB** | **2.75 GB headroom** |
-
-### Risk Areas
-
-**Risk 1: Simultaneous model loading at startup (HIGH risk)**  
-If `ingestion-worker` is restarted during active ingestion, YOLO and InsightFace load simultaneously. Combined peak during loading can briefly spike to ~3 GB for the worker alone.
-- **Mitigation:** Add 2-second sleep between YOLO load and InsightFace load in lifespan startup. Load YOLO first (smaller), then InsightFace.
-
-**Risk 2: Postgres not releasing memory after large queries**  
-PostgreSQL `work_mem` (default 4 MB) can multiply by parallel workers. The pgvector HNSW index construction uses significant RAM.
-- **Mitigation:** Set `max_parallel_workers_per_gather=0` in postgres config during ingestion to prevent parallel query plans. Use `work_mem=8MB` (conservative).
-
-**Risk 3: HDBSCAN on large embedding sets**  
-Precomputed cosine distance matrix for N faces = N² floats. At 50,000 unknown faces: 50,000² × 4 bytes = **10 GB** — exceeds available RAM.
-- **Mitigation:** Do not run HDBSCAN on the full dataset naively. Use a two-stage approach:
-  1. Pre-filter with pgvector ANN to find face groups (neighborhoods)
-  2. Run HDBSCAN on batches of ≤ 10,000 embeddings, merge clusters afterward
-  - OR: use `algorithm='boruvka_kdtree'` (does NOT require precomputed matrix, uses O(n log n) memory) with `metric='euclidean'` on normalized vectors (equivalent to cosine distance on L2-normalized vectors since `||a-b||² = 2 - 2·cos(θ)`)
-  - For a home video library with < 10,000 hours: realistic max ~100,000 unknown faces. Use boruvka_kdtree for safety.
-
-```python
-# Safe HDBSCAN for large N — no O(n²) memory
-clusterer = HDBSCAN(
-    min_cluster_size=3,
-    min_samples=2,
-    metric='euclidean',          # works on L2-normalized vectors (= cosine)
-    algorithm='boruvka_kdtree',  # O(n log n) memory, fast
-    cluster_selection_epsilon=0.55,  # sqrt(2*(1-0.7)) ≈ 0.775, adjust empirically
-)
-labels = clusterer.fit_predict(embeddings)  # embeddings already L2-normalized
-```
-
-**Risk 4: Frame temp directory fill (MEDIUM risk)**  
-1 fps on a 2-hour video = 7,200 frames × ~150 KB JPEG = ~1 GB temp disk per video.
-- **Mitigation:** Upload frames to MinIO and delete temp files as you go (streaming upload, not batch). Cap `WORK_DIR_MAX_GB=2` via config.
-
-### Docker Compose Memory Limits
-
-```yaml
-services:
-  ingestion-worker:
-    deploy:
-      resources:
-        limits:
-          memory: 5g           # Already in requirements.md — correct
-        reservations:
-          memory: 2g           # Ensure it always gets 2 GB
-  api:
-    deploy:
-      resources:
-        limits:
-          memory: 1g           # Enough for FastAPI + HDBSCAN + python-telegram-bot
-  postgres:
-    deploy:
-      resources:
-        limits:
-          memory: 1500m        # With 256MB shared_buffers
-```
-
-### OMP Thread Configuration (Critical)
-
-```yaml
-# ingestion-worker environment:
-OMP_NUM_THREADS: "4"          # ONNX Runtime threads (half of i5-6200's 4 logical cores)
-OPENBLAS_NUM_THREADS: "4"     # NumPy/SciPy (used by HDBSCAN)
-MKL_NUM_THREADS: "4"
-```
-
-Do NOT use all 4 cores for OMP — leave 0–1 cores for I/O, MinIO client, and Postgres asyncpg connections.
-
-### Swap File
-
-Add a 4 GB swap file on the Ubuntu host as a safety net (already recommended in requirements.md):
-```bash
-fallocate -l 4G /swapfile
-chmod 600 /swapfile
-mkswap /swapfile
-swapon /swapfile
-echo '/swapfile none swap sw 0 0' >> /etc/fstab
-```
-Swap prevents OOM kills at the cost of degraded performance. Acceptable since ingestion is a background task.
+| Risk | Severity | Feature | Mitigation |
+|------|----------|---------|------------|
+| `label` column absent from live DB | LOW | Feature 1 | Column defined in init schema (001_schema.sql); live DB was created from this schema; confirmed present |
+| Watchdog `on_created` fires before file fully written | MEDIUM | Feature 3 | Implement file stability check (poll size until stable); standard pattern for watch daemons |
+| MinIO key collision (two watchers or duplicate filenames) | LOW | Feature 3 | `minio_key = "videos/{filename}"`  if same filename uploaded twice, MinIO silently overwrites; ingestion-worker returns `skipped` on second call |
+| watcherMinIO connection via `minio:9000` (internal hostname) | LOW | Feature 3 | All existing services use `minio:9000` successfully; `home-infra` network provides DNS resolution |
+| `PersonDetailPage` thumbnail loading performance | LOW | Feature 2 | Uses existing `/frames/{id}/image` redirect  each thumbnail is a separate HTTP request; paginate or lazy-load if appearance_count is high |
+| `digest.py` label display for clusters without labels | NONE | Feature 1 | `COALESCE(uc.label, 'Unknown person')` or Python `uc["label"] or "Unknown person"`  trivial null guard |
 
 ---
 
-## Video Streaming Architecture
-
-### Decision: Presigned URLs via API Redirect (NOT Proxy)
-
-```
-Browser                  API                    MinIO
-   │                      │                        │
-   ├─GET /videos/{id}/stream──►                    │
-   │                      │ presigned_url =         │
-   │                      │ minio.presigned_get(    │
-   │                      │   key, expires=3600)    │
-   │   302 Location: <presigned_url>                │
-   ◄─────────────────────-┤                        │
-   │                      │                        │
-   ├─GET <presigned_url> (follows redirect)────────►│
-   │                      │        stream bytes     │
-   ◄───────────────────────────────────────────────┤
-```
-
-**Why presigned URLs, not proxy:**
-- Zero bandwidth overhead on API (video can be gigabytes)
-- MinIO supports HTTP Range requests natively — `<video>` element seeks work correctly
-- API service stays memory-efficient (no buffering)
-- Presigned URLs expire (1 hour default) — no persistent credential exposure
-
-**MinIO CORS configuration required** (needed for browser direct access):
-```json
-[
-  {
-    "AllowedHeaders": ["*"],
-    "AllowedMethods": ["GET", "HEAD"],
-    "AllowedOrigins": ["https://search.shumov.eu"],
-    "ExposeHeaders": ["Content-Length", "Accept-Ranges", "Content-Range"]
-  }
-]
-```
-Apply via: `mc cors set --json cors.json myminio/videos`
-
-**Frame thumbnail presigned URLs** work identically: `GET /frames/{id}/image` → 302 to `frames/{video_id}/{ts_ms}.jpg` presigned URL.
-
-**Presigned URL generation (Python):**
-```python
-from minio import Minio
-from datetime import timedelta
-
-minio_client = Minio(...)
-
-def presigned_video_url(minio_key: str) -> str:
-    return minio_client.presigned_get_object(
-        bucket_name="videos",
-        object_name=minio_key,
-        expires=timedelta(hours=1)
-    )
-```
-
-**Confidence:** HIGH — MinIO presigned GET confirmed via Context7 docs; CORS requirement verified from MinIO documentation.
-
----
-
-## Build Order
-
-### Phase Dependencies
-
-```
-Phase 1: Infrastructure Foundation
-├── Docker Compose scaffold (postgres only)
-├── DB schema + pgvector extension
-├── MinIO client wrapper
-└── Verify: psql + minio ping from both services
-
-Phase 2: Core Ingestion Pipeline   ← depends on Phase 1
-├── ingestion-worker skeleton (FastAPI + /health + /ingest)
-├── FFmpeg frame extraction module
-├── Frame upload to MinIO + frames table writes
-└── Verify: ingest a 10s test video, see frames in MinIO + DB
-
-Phase 3: ML Detection   ← depends on Phase 2
-├── YOLO integration (load at startup, batch frames)
-├── detections table writes
-├── InsightFace integration (full frame, NOT YOLO crop)
-├── face_detections table writes (no matching yet, all unknown)
-└── Verify: test video, assert detection counts
-
-Phase 4: Face Enrollment + Matching   ← depends on Phase 3
-├── known_persons + person_embeddings tables
-├── pgvector HNSW index
-├── Enrollment endpoint (POST /persons/{id}/enroll)
-├── Cosine similarity matching in ingestion pipeline
-└── Verify: enroll a face, re-ingest video, assert matched_person_id populated
-
-Phase 5: Search API   ← depends on Phase 3 (can run before Phase 4)
-├── GET /videos, GET /videos/{id}
-├── POST /search (all filter combinations)
-├── GET /videos/{id}/stream → presigned URL
-├── GET /frames/{id}/image → presigned URL
-└── Verify: search returns correct frames; video plays in browser at ts_ms
-
-Phase 6: Web UI   ← depends on Phase 5
-├── Settings page (API token, base URL)
-├── People page (enroll, list, appearances)
-├── Search page (filters, result grid, modal + video play)
-├── Videos page (status, re-ingest)
-└── Verify: full round-trip via UI
-
-Phase 7: n8n Integration   ← depends on Phase 5
-├── Workflow 1: MinIO event → POST /ingest
-├── Workflow 2: (optional) scheduled scan every 10 min
-└── Verify: drop a video in MinIO, watch it auto-ingest
-
-Phase 8: Unknown Face Clustering   ← depends on Phase 4
-├── face_clusters table migration
-├── cluster_id FK on face_detections
-├── HDBSCAN clustering job (POST /cluster/run in api)
-├── Cluster browsing UI (new page: Clusters)
-├── Cluster labeling → converts cluster to known_person
-└── Verify: ingest 5+ videos, run clustering, see grouped faces in UI
-
-Phase 9: Telegram Digest   ← depends on Phase 8, Phase 7
-├── python-telegram-bot dependency in api
-├── POST /digest/send endpoint
-├── n8n Workflow 3: daily cron 02:00 → /cluster/run → /digest/send
-└── Verify: trigger manually, receive Telegram message
-
-Phase 10: Import Flow   ← can be done in parallel with Phase 7+
-├── POST /ingest/batch endpoint (scan MinIO prefix)
-├── Bulk import script for NAS → MinIO
-└── Verify: 100+ videos ingested without duplicate rows
-
-Phase 11: Hardening   ← depends on all above
-├── Auth middleware (Bearer token, skip /health /docs in dev)
-├── Retry logic for failed ingestion (re-queue on startup)
-├── Error message column on videos table
-├── Swap file setup, Docker memory limits
-├── Basic metrics endpoint (/metrics, Prometheus format)
-└── Verify: restart during ingestion, video re-queued automatically
-```
-
-### Critical Dependency Notes
-
-1. **Phase 3 before Phase 4**: You cannot do matching until embeddings exist. Run Phase 3 on test data first, then add matching in Phase 4.
-
-2. **Phase 8 is standalone feature territory**: Do not block v1 launch on clustering. The core product (search by known person + object class) is complete after Phase 6. Phases 8–9 are the "clustering milestone" that comes after first working version.
-
-3. **Phase 10 (import flow) is a prerequisite for real-world use** but not for development testing. Prioritize after Phase 7.
-
-4. **ingestion-worker and api share no code** intentionally. Both have their own DB pool, both are separate Docker services. Do NOT make api call ingestion-worker internally — n8n is the orchestrator.
-
-5. **The `cluster_id` column** can be added to `face_detections` via a migration in Phase 8 without breaking Phase 1–7 behavior (it's nullable, existing rows get NULL).
-
----
-
-## Sources
-
-| Claim | Source | Confidence |
-|-------|--------|------------|
-| HDBSCAN handles varying density better than DBSCAN | Context7: scikit-learn-contrib/hdbscan docs | HIGH |
-| HDBSCAN precomputed cosine distance matrix | Context7: scikit-learn-contrib/hdbscan, pairwise_distances example | HIGH |
-| HDBSCAN in scikit-learn since 1.3 | scikit-learn docs via Context7 | HIGH |
-| MinIO presigned GET URL via Python SDK | Context7: minio/docs | HIGH |
-| MinIO CORS required for browser direct access | MinIO docs (standard S3 pattern) | HIGH |
-| python-telegram-bot v22, bot.send_message() | Context7: python-telegram-bot/python-telegram-bot | HIGH |
-| InsightFace buffalo_l CPU memory ~1.4 GB | requirements.md baseline + InsightFace ONNX model size | MEDIUM |
-| YOLOv8n CPU memory ~0.5 GB | requirements.md baseline + Ultralytics docs | MEDIUM |
-| HDBSCAN boruvka_kdtree O(n log n) memory | Context7: scikit-learn-contrib/hdbscan performance docs | HIGH |
-| Precomputed distance matrix O(n²) memory warning | Mathematical analysis (N² floats) | HIGH |
+*Source: Full source audit of services/api/app/\*.py, services/web/src/\*\*/\*.ts(x), docker-compose.yml, db/init/001_schema.sql, db/migrations/*.sql  2026-05-22*
