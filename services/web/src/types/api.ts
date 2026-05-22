@@ -109,3 +109,37 @@ export interface UploadUrlResponse {
   key:        string;   // MinIO object key e.g. "videos/video.mp4" — pass to reIngestVideo()
   expires_in: number;   // URL lifetime in seconds (3600)
 }
+
+export interface VideoDetailItem {
+  id:              string;
+  minio_key:       string;
+  filename:        string;
+  status:          'pending' | 'processing' | 'done' | 'failed';
+  error_message:   string | null;
+  recorded_at:     string | null;
+  duration_sec:    number | null;
+  frame_count:     number;
+  detection_count: number;
+  face_count:      number;
+  ingested_at:     string;
+  stream_url:      string;   // presigned MinIO GET URL — use directly in <video src>
+}
+
+export interface VideoDetectionItem {
+  id:            string;
+  frame_id:      string;    // UUID — not a numeric frame_id; do NOT pass to getFrameImageUrl()
+  ts_ms:         number;
+  thumbnail_url: string;   // presigned URL — use directly in <img src>
+  label:         string;
+  confidence:    number;   // 0.0–1.0
+  bbox_json:     string;
+}
+
+export interface VideoFaceItem {
+  id:               string;
+  frame_id:         string;    // UUID — not a numeric frame_id
+  ts_ms:            number;
+  thumbnail_url:    string;   // presigned URL — use directly in <img src>
+  person_name:      string;   // already resolved by API (e.g. "Alice" or "Unknown Cluster #3")
+  appearance_count: number;
+}
