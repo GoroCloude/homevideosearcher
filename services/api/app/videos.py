@@ -274,6 +274,85 @@ async def list_video_detections(video_id: UUID) -> List[DetectionItem]:
     ]
 
 
+class FaceItem(BaseModel):
+    id:               str
+    frame_id:         str
+    ts_ms:            int           # millisecond offset within video
+    thumbnail_url:    str           # presigned GET URL for frame thumbnail (MINIO_BUCKET_FRAMES)
+    person_name:      str           # persons.name, unknown_clusters.label_name, or "Unknown Cluster #<uuid8>"
+    appearance_count: int           # total appearances of this person/cluster in this video
+
+
+@router.get("/{video_id}/faces", response_model=List[FaceItem])
+async def list_video_faces(video_id: UUID) -> List[FaceItem]:
+    """
+    Returns all face detection records for the video ordered by timestamp.
+    person_name resolution priority:
+      1. persons.name  (when matched_person_id is set)
+      2. unknown_clusters.label_name  (when unknown_cluster_id is set and label_name is not null)
+      3. "Unknown Cluster #<first-8-chars-of-cluster-UUID>"  (fallback)
+    appearance_count: total rows sharing the same matched_person_id or unknown_cluster_id in this video.
+    Auth: inherited from videos_router registration in main.py.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        exists = await conn.fetchval(
+            "SELECT 1 FROM videos WHERE id = $1", video_id
+        )
+        if not exists:
+            raise HTTPException(status_code=404, detail="Video not found")
+
+        rows = await conn.fetch(
+            """
+            SELECT
+                fd.id::text              AS id,
+                fd.frame_id::text        AS frame_id,
+                f.ts_ms,
+                f.minio_key              AS frame_minio_key,
+                p.name                   AS person_name,
+                uc.label_name            AS cluster_label,
+                LEFT(uc.id::text, 8)     AS cluster_id_prefix,
+                COUNT(fd.id) OVER (
+                    PARTITION BY COALESCE(
+                        fd.matched_person_id::text,
+                        fd.unknown_cluster_id::text
+                    )
+                )                        AS appearance_count
+            FROM face_detections fd
+            JOIN frames f ON f.id = fd.frame_id
+            LEFT JOIN persons p ON p.id = fd.matched_person_id
+            LEFT JOIN unknown_clusters uc ON uc.id = fd.unknown_cluster_id
+            WHERE f.video_id = $1
+            ORDER BY f.ts_ms, fd.id
+            """,
+            video_id,
+        )
+
+    items: List[FaceItem] = []
+    for r in rows:
+        # Resolve display name in priority order
+        if r["person_name"] is not None:
+            name = r["person_name"]
+        elif r["cluster_label"] is not None:
+            name = r["cluster_label"]
+        else:
+            name = f"Unknown Cluster #{r['cluster_id_prefix'] or 'unknown'}"
+
+        items.append(FaceItem(
+            id=r["id"],
+            frame_id=r["frame_id"],
+            ts_ms=r["ts_ms"],
+            thumbnail_url=generate_presigned_url(
+                bucket=config.MINIO_BUCKET_FRAMES,
+                key=r["frame_minio_key"],
+                expires_hours=1,
+            ),
+            person_name=name,
+            appearance_count=r["appearance_count"],
+        ))
+    return items
+
+
 @router.get("/{video_id}/stream")
 async def stream_video(video_id: UUID) -> RedirectResponse:
     """
