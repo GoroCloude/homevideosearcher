@@ -45,6 +45,11 @@ class ClusterResponse(BaseModel):
     last_seen:               Optional[str]
     thumbnail_url:           Optional[str]
     ignored:                 bool
+    label:                   Optional[str] = None
+
+
+class ClusterLabelRequest(BaseModel):
+    label: Optional[str] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -298,6 +303,7 @@ async def list_clusters(include_ignored: bool = False) -> list[ClusterResponse]:
                 uc.first_seen::text,
                 uc.last_seen::text,
                 uc.ignored,
+                uc.label,
                 fd.frame_id AS representative_frame_id
             FROM unknown_clusters uc
             LEFT JOIN face_detections fd ON fd.id = uc.representative_face_id
@@ -318,6 +324,7 @@ async def list_clusters(include_ignored: bool = False) -> list[ClusterResponse]:
                 if r["representative_frame_id"] else None
             ),
             ignored=r["ignored"],
+            label=r["label"],
         )
         for r in rows
     ]
@@ -360,7 +367,25 @@ async def restore_cluster(cluster_id: UUID) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# POST /clusters/{cluster_id}/promote  — enroll cluster as known person
+# PATCH /clusters/{cluster_id}/label  — set or clear freeform nickname
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.patch("/clusters/{cluster_id}/label", status_code=status.HTTP_200_OK)
+async def set_cluster_label(cluster_id: UUID, body: ClusterLabelRequest) -> dict:
+    """Set or clear the freeform nickname for a cluster. Empty string → null."""
+    label = body.label.strip() if body.label else None
+    if label and len(label) > 100:
+        raise HTTPException(status_code=422, detail="label must be ≤ 100 characters")
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE unknown_clusters SET label = $1 WHERE id = $2",
+            label,
+            cluster_id,
+        )
+    if result == "UPDATE 0":
+        raise HTTPException(status_code=404, detail="Cluster not found")
+    return {"id": str(cluster_id), "label": label}
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/clusters/{cluster_id}/promote", status_code=status.HTTP_200_OK)
